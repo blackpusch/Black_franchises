@@ -1,0 +1,12 @@
+spring:
+  application:
+    name: franchises-api
+  data:
+    mongodb:
+      uri: ${MONGODB_URI:mongodb://localhost:27017/franchises}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
