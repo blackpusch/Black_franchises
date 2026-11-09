@@ -768,7 +768,8 @@ class FranchiseUseCaseImplTest {
         when(repositoryPort.findById("f1")).thenReturn(Mono.just(franchise));
 
         StepVerifier.create(useCase.updateBranchName("f1", "b2", "  SUCURSAL NORTE "))
-                .expectError(DuplicateResourceException.class)
+                .expectErrorMatches(err -> err instanceof DuplicateResourceException
+                        && err.getMessage().equals("Branch already exists with name: SUCURSAL NORTE"))
                 .verify();
 
         verify(repositoryPort, times(1)).findById("f1");
@@ -811,8 +812,9 @@ class FranchiseUseCaseImplTest {
 
         when(repositoryPort.findById("f1")).thenReturn(Mono.just(franchise));
 
-        StepVerifier.create(useCase.addProduct("f1", "b1", "  big mac ", 15))
-                .expectError(DuplicateResourceException.class)
+        StepVerifier.create(useCase.addProduct("f1", "b1", "  big MAC ", 15))
+                .expectErrorMatches(err -> err instanceof DuplicateResourceException
+                        && err.getMessage().equals("Product already exists in branch with name: big MAC"))
                 .verify();
 
         verify(repositoryPort, times(1)).findById("f1");
@@ -837,7 +839,8 @@ class FranchiseUseCaseImplTest {
         when(repositoryPort.findById("f1")).thenReturn(Mono.just(franchise));
 
         StepVerifier.create(useCase.updateProductName("f1", "b1", "p2", " WHOPPER "))
-                .expectError(DuplicateResourceException.class)
+                .expectErrorMatches(err -> err instanceof DuplicateResourceException
+                        && err.getMessage().equals("Product already exists in branch with name: WHOPPER"))
                 .verify();
 
         verify(repositoryPort, times(1)).findById("f1");
@@ -897,7 +900,7 @@ class FranchiseUseCaseImplTest {
 
         StepVerifier.create(useCase.createFranchise("  McDonalds  "))
                 .expectErrorMatches(err -> err instanceof DuplicateResourceException
-                        && err.getMessage().contains("McDonalds"))
+                        && err.getMessage().equals("Franchise already exists with name: McDonalds"))
                 .verify();
 
         verify(repositoryPort, times(1)).existsByNameIgnoreCase("McDonalds");
@@ -912,7 +915,8 @@ class FranchiseUseCaseImplTest {
         when(repositoryPort.existsByNameIgnoreCaseAndIdNot("McDonalds", "f1")).thenReturn(Mono.just(true));
 
         StepVerifier.create(useCase.updateFranchiseName("f1", "  McDonalds  "))
-                .expectError(DuplicateResourceException.class)
+                .expectErrorMatches(err -> err instanceof DuplicateResourceException
+                        && err.getMessage().equals("Franchise already exists with name: McDonalds"))
                 .verify();
 
         verify(repositoryPort, times(1)).findById("f1");

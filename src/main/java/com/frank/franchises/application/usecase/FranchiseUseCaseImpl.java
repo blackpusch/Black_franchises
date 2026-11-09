@@ -40,14 +40,14 @@ public class FranchiseUseCaseImpl implements FranchiseUseCase {
     @Override
     public Mono<Franchise> createFranchise(String name) {
         return Mono.defer(() -> {
-            String normalized = requireNonBlankName(name, "Franchise name must not be blank");
-            return repositoryPort.existsByNameIgnoreCase(normalized)
+            String trimmedName = requireNonBlankName(name, "Franchise name must not be blank");
+            return repositoryPort.existsByNameIgnoreCase(trimmedName)
                     .flatMap(exists -> {
                         if (Boolean.TRUE.equals(exists)) {
-                            return Mono.error(new DuplicateResourceException("Franchise already exists with name: " + normalized));
+                            return Mono.error(new DuplicateResourceException("Franchise already exists with name: " + trimmedName));
                         }
                         Franchise franchise = Franchise.builder()
-                                .name(normalized)
+                                .name(trimmedName)
                                 .branches(new ArrayList<>())
                                 .build();
                         return repositoryPort.save(franchise);
@@ -68,13 +68,13 @@ public class FranchiseUseCaseImpl implements FranchiseUseCase {
     @Override
     public Mono<Franchise> addBranch(String franchiseId, String branchName) {
         return withOptimisticLockRetry(() -> {
-            String normalized = requireNonBlankName(branchName, "Branch name must not be blank");
+            String trimmedName = requireNonBlankName(branchName, "Branch name must not be blank");
             return findFranchise(franchiseId)
                     .flatMap(franchise -> {
-                        ensureBranchNameAvailable(franchise, normalized, null);
+                        ensureBranchNameAvailable(franchise, trimmedName, null);
                         List<Branch> updatedBranches = new ArrayList<>(branchesOf(franchise));
                         updatedBranches.add(Branch.builder()
-                                .name(normalized)
+                                .name(trimmedName)
                                 .products(new ArrayList<>())
                                 .build());
                         Franchise updatedFranchise = franchise.toBuilder()
@@ -88,15 +88,15 @@ public class FranchiseUseCaseImpl implements FranchiseUseCase {
     @Override
     public Mono<Franchise> addProduct(String franchiseId, String branchId, String productName, int stock) {
         return withOptimisticLockRetry(() -> {
-            String normalized = requireNonBlankName(productName, "Product name must not be blank");
+            String trimmedName = requireNonBlankName(productName, "Product name must not be blank");
             requireNonNegativeStock(stock);
             return findFranchise(franchiseId)
                     .flatMap(franchise -> findBranch(franchise, branchId)
                             .flatMap(branch -> {
-                                ensureProductNameAvailable(branch, normalized, null);
+                                ensureProductNameAvailable(branch, trimmedName, null);
                                 List<Product> updatedProducts = new ArrayList<>(productsOf(branch));
                                 updatedProducts.add(Product.builder()
-                                        .name(normalized)
+                                        .name(trimmedName)
                                         .stock(stock)
                                         .build());
                                 Branch updatedBranch = branch.toBuilder()
@@ -160,15 +160,15 @@ public class FranchiseUseCaseImpl implements FranchiseUseCase {
     @Override
     public Mono<Franchise> updateFranchiseName(String franchiseId, String newName) {
         return withOptimisticLockRetry(() -> {
-            String normalized = requireNonBlankName(newName, "Franchise name must not be blank");
+            String trimmedName = requireNonBlankName(newName, "Franchise name must not be blank");
             return findFranchise(franchiseId)
-                    .flatMap(franchise -> repositoryPort.existsByNameIgnoreCaseAndIdNot(normalized, franchiseId)
+                    .flatMap(franchise -> repositoryPort.existsByNameIgnoreCaseAndIdNot(trimmedName, franchiseId)
                             .flatMap(exists -> {
                                 if (Boolean.TRUE.equals(exists)) {
-                                    return Mono.error(new DuplicateResourceException("Franchise already exists with name: " + normalized));
+                                    return Mono.error(new DuplicateResourceException("Franchise already exists with name: " + trimmedName));
                                 }
                                 Franchise updatedFranchise = franchise.toBuilder()
-                                        .name(normalized)
+                                        .name(trimmedName)
                                         .branches(new ArrayList<>(branchesOf(franchise)))
                                         .build();
                                 return repositoryPort.save(updatedFranchise);
@@ -179,13 +179,13 @@ public class FranchiseUseCaseImpl implements FranchiseUseCase {
     @Override
     public Mono<Franchise> updateBranchName(String franchiseId, String branchId, String newName) {
         return withOptimisticLockRetry(() -> {
-            String normalized = requireNonBlankName(newName, "Branch name must not be blank");
+            String trimmedName = requireNonBlankName(newName, "Branch name must not be blank");
             return findFranchise(franchiseId)
                     .flatMap(franchise -> findBranch(franchise, branchId)
                             .flatMap(branch -> {
-                                ensureBranchNameAvailable(franchise, normalized, branchId);
+                                ensureBranchNameAvailable(franchise, trimmedName, branchId);
                                 Branch updatedBranch = branch.toBuilder()
-                                        .name(normalized)
+                                        .name(trimmedName)
                                         .products(new ArrayList<>(productsOf(branch)))
                                         .build();
                                 Franchise updatedFranchise = replaceBranch(franchise, updatedBranch);
@@ -197,14 +197,14 @@ public class FranchiseUseCaseImpl implements FranchiseUseCase {
     @Override
     public Mono<Franchise> updateProductName(String franchiseId, String branchId, String productId, String newName) {
         return withOptimisticLockRetry(() -> {
-            String normalized = requireNonBlankName(newName, "Product name must not be blank");
+            String trimmedName = requireNonBlankName(newName, "Product name must not be blank");
             return findFranchise(franchiseId)
                     .flatMap(franchise -> findBranch(franchise, branchId)
                             .flatMap(branch -> findProduct(branch, productId)
                                     .flatMap(product -> {
-                                        ensureProductNameAvailable(branch, normalized, productId);
+                                        ensureProductNameAvailable(branch, trimmedName, productId);
                                         Product updatedProduct = product.toBuilder()
-                                                .name(normalized)
+                                                .name(trimmedName)
                                                 .build();
                                         Branch updatedBranch = replaceProduct(branch, updatedProduct);
                                         Franchise updatedFranchise = replaceBranch(franchise, updatedBranch);

@@ -259,6 +259,7 @@ La carpeta `terraform/` contiene los manifiestos para aprovisionar un clúster d
 
 ```text
 terraform/
+├── .terraform.lock.hcl          # Lockfile de versión e integridad del provider
 ├── versions.tf                  # Provider mongodb/mongodbatlas ~> 1.15
 ├── variables.tf                 # Variables configurables (región, tier, usuario, etc.)
 ├── main.tf                      # Proyecto, Cluster M0 en AWS, Usuario y Access List
