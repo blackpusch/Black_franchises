@@ -74,6 +74,8 @@ graph TD
 | **Orquestación Local** | Docker Compose | v2+ |
 | **Infraestructura como Código (IaC)** | Terraform (MongoDB Atlas Provider en AWS) | >= 1.5.0 |
 
+> 📄 Para consultar la lista completa, el desglose de versiones y el árbol de dependencias resuelto, consulta [DEPENDENCIES.md](./DEPENDENCIES.md) y [dependencies.txt](./dependencies.txt).
+
 ---
 
 ## ⚙️ 3. Requisitos Previos y Ejecución Local
