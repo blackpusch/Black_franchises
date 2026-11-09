@@ -1184,6 +1184,48 @@ class FranchiseUseCaseImplTest {
         verify(repositoryPort, never()).save(any());
     }
 
+    // --- 14. Hallazgo #12: Límite máximo de longitud en requireNonBlankName (NAME_MAX_LENGTH = 100, medido sin trim) ---
+
+    @Test
+    @DisplayName("requireNonBlankName: acepta exactamente 100 caracteres y rechaza 101 caracteres (incluyendo espacios sin trim) con BadRequestException")
+    void requireNonBlankName_MaxLength100And101_ShouldEnforceLimitBeforeTrim() {
+        String name100 = "A".repeat(FranchiseUseCaseImpl.NAME_MAX_LENGTH);
+        when(repositoryPort.existsByNameIgnoreCase(name100)).thenReturn(Mono.just(false));
+        when(repositoryPort.save(any(Franchise.class))).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+
+        StepVerifier.create(useCase.createFranchise(name100))
+                .assertNext(saved -> assertThat(saved.getName()).hasSize(100).isEqualTo(name100))
+                .verifyComplete();
+
+        reset(repositoryPort);
+
+        String name101 = "A".repeat(FranchiseUseCaseImpl.NAME_MAX_LENGTH + 1);
+        String name101WithSpacesUntrimmed = " " + "B".repeat(FranchiseUseCaseImpl.NAME_MAX_LENGTH - 1) + " ";
+        assertThat(name101WithSpacesUntrimmed).hasSize(101);
+
+        List<Mono<?>> overLimitCalls = List.of(
+                useCase.createFranchise(name101),
+                useCase.createFranchise(name101WithSpacesUntrimmed),
+                useCase.addBranch("f1", name101),
+                useCase.addProduct("f1", "b1", name101, 10),
+                useCase.updateFranchiseName("f1", name101),
+                useCase.updateBranchName("f1", "b1", name101),
+                useCase.updateProductName("f1", "b1", "p1", name101)
+        );
+
+        for (Mono<?> call : overLimitCalls) {
+            StepVerifier.create(call)
+                    .expectErrorSatisfies(ex -> {
+                        assertThat(ex).isInstanceOf(BadRequestException.class);
+                        assertThat(ex.getMessage()).isEqualTo("Name must not exceed 100 characters");
+                        assertThat(ex.getMessage()).doesNotContain(name101);
+                    })
+                    .verify();
+        }
+
+        verifyNoInteractions(repositoryPort);
+    }
+
     private Franchise copyFranchise(Franchise source) {
         List<Branch> branchesCopy = new ArrayList<>();
         for (Branch b : source.getBranches()) {

@@ -152,7 +152,8 @@ Ruta base de la API: `/api/v1/franchises`
 | **10** | `PATCH`| `/api/v1/franchises/{fId}/branches/{bId}/name` | [PLUS] Actualizar el nombre de una sucursal | `200 OK` |
 | **11** | `PATCH`| `/api/v1/franchises/{fId}/branches/{bId}/products/{pId}/name` | [PLUS] Actualizar el nombre de un producto | `200 OK` |
 
-> **ℹ️ Notas de comportamiento en los endpoints de consulta (`GET`)**:
+> **ℹ️ Notas de comportamiento en los endpoints**:
+> - **Validación de longitud de nombres (`NAME_MAX_LENGTH = 100`)**: En los 6 endpoints que reciben `name` (`CreateFranchiseRequest`, `CreateBranchRequest`, `CreateProductRequest` y `UpdateNameRequest`) y en la validación de negocio `requireNonBlankName`, el límite máximo de **100 caracteres se mide sobre la cadena recibida sin `trim`** (antes de recortar espacios laterales); una vez superada la validación de longitud y no-vacío, el nombre se normaliza con `trim()` para su almacenamiento y comparación de unicidad.
 > - **Listado sin paginación (`GET /api/v1/franchises`)**: Retorna todas las franquicias de la colección ordenadas de forma determinista por `name` (ascendente) y luego por `id` (ascendente), sin paginación. Esta operación es **100% de solo lectura** (no realiza escrituras en MongoDB ni altera documentos legados sin campo `version`).
 > - **Consulta por ID (`GET /api/v1/franchises/{fId}`)**: Reutiliza `findById`, por lo que si el documento consultado es un **documento legado sin campo `version`**, inicializa atómicamente `version = 0` en MongoDB para dejarlo preparado ante futuras actualizaciones con bloqueo optimista (`@Version`). En ningún caso se expone el campo `version` en el DTO de respuesta `FranchiseResponse`.
 
@@ -263,7 +264,7 @@ terraform/
 ### Pasos para desplegar la base de datos en MongoDB Atlas:
 
 1. **Configurar credenciales**:
-   Copia el archivo de ejemplo y ajusta tus claves de API de MongoDB Atlas (`db_password` debe definirse en **texto plano y sin pre-codificar**, ya que `mongodbatlas_database_user` recibe la contraseña literal y `outputs.tf` se encarga automáticamente de aplicar URL-encoding al construir `mongodb_connection_uri`):
+   Copia el archivo de ejemplo y ajusta tus claves de API de MongoDB Atlas (`db_username` y `db_password` deben definirse en **texto plano y sin pre-codificar**, ya que `mongodbatlas_database_user` recibe las credenciales literales y `outputs.tf` se encarga automáticamente de aplicar URL-encoding al construir `mongodb_connection_uri`):
    ```bash
    cd terraform
    cp terraform.tfvars.example terraform.tfvars

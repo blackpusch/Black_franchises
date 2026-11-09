@@ -7,6 +7,8 @@ import reactor.core.publisher.Mono;
 
 public interface FranchiseUseCase {
 
+    int NAME_MAX_LENGTH = 100;
+
     Mono<Franchise> createFranchise(String name);
 
     Flux<Franchise> getAllFranchises();

@@ -654,4 +654,85 @@ class FranchiseControllerTest {
             verify(franchiseUseCase).updateProductStock("f1", "b1", "p1", 0);
         }
     }
+
+    // --- 13. Hallazgo #12: Límite de longitud @Size(max = NAME_MAX_LENGTH = 100) en los 6 endpoints con nombre ---
+
+    static Stream<Arguments> sixNameEndpointsWithBoundaryLength() {
+        return Stream.of(
+                Arguments.of(HttpMethod.POST, "/api/v1/franchises", false, 201, "name: El nombre de la franquicia no puede exceder 100 caracteres"),
+                Arguments.of(HttpMethod.POST, "/api/v1/franchises/f1/branches", false, 201, "name: El nombre de la sucursal no puede exceder 100 caracteres"),
+                Arguments.of(HttpMethod.POST, "/api/v1/franchises/f1/branches/b1/products", true, 201, "name: El nombre del producto no puede exceder 100 caracteres"),
+                Arguments.of(HttpMethod.PATCH, "/api/v1/franchises/f1/name", false, 200, "name: El nuevo nombre no puede exceder 100 caracteres"),
+                Arguments.of(HttpMethod.PATCH, "/api/v1/franchises/f1/branches/b1/name", false, 200, "name: El nuevo nombre no puede exceder 100 caracteres"),
+                Arguments.of(HttpMethod.PATCH, "/api/v1/franchises/f1/branches/b1/products/p1/name", false, 200, "name: El nuevo nombre no puede exceder 100 caracteres")
+        );
+    }
+
+    @ParameterizedTest(name = "Longitud 100 válida [{index}]: {0} {1} pasa al caso de uso y retorna {3}")
+    @MethodSource("sixNameEndpointsWithBoundaryLength")
+    void nameWith100Characters_ParameterizedAcrossSixEndpoints_ShouldPassValidationAndCallUseCase(
+            HttpMethod method, String uri, boolean includeStock, int expectedStatus, String unusedExpectedErrorMessage) {
+        String name100 = "N".repeat(FranchiseUseCase.NAME_MAX_LENGTH);
+        String jsonBody = includeStock
+                ? "{\"name\": \"" + name100 + "\", \"stock\": 10}"
+                : "{\"name\": \"" + name100 + "\"}";
+
+        Product p = Product.builder().id("p1").name(name100).stock(10).build();
+        Branch b = Branch.builder().id("b1").name(name100).products(List.of(p)).build();
+        Franchise saved = Franchise.builder().id("f1").name(name100).branches(List.of(b)).build();
+
+        switch (uri) {
+            case "/api/v1/franchises" -> when(franchiseUseCase.createFranchise(name100)).thenReturn(Mono.just(saved));
+            case "/api/v1/franchises/f1/branches" -> when(franchiseUseCase.addBranch("f1", name100)).thenReturn(Mono.just(saved));
+            case "/api/v1/franchises/f1/branches/b1/products" -> when(franchiseUseCase.addProduct("f1", "b1", name100, 10)).thenReturn(Mono.just(saved));
+            case "/api/v1/franchises/f1/name" -> when(franchiseUseCase.updateFranchiseName("f1", name100)).thenReturn(Mono.just(saved));
+            case "/api/v1/franchises/f1/branches/b1/name" -> when(franchiseUseCase.updateBranchName("f1", "b1", name100)).thenReturn(Mono.just(saved));
+            case "/api/v1/franchises/f1/branches/b1/products/p1/name" -> when(franchiseUseCase.updateProductName("f1", "b1", "p1", name100)).thenReturn(Mono.just(saved));
+        }
+
+        webTestClient.method(method)
+                .uri(uri)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(jsonBody)
+                .exchange()
+                .expectStatus().isEqualTo(expectedStatus)
+                .expectBody()
+                .jsonPath("$.id").isEqualTo("f1");
+
+        switch (uri) {
+            case "/api/v1/franchises" -> verify(franchiseUseCase).createFranchise(name100);
+            case "/api/v1/franchises/f1/branches" -> verify(franchiseUseCase).addBranch("f1", name100);
+            case "/api/v1/franchises/f1/branches/b1/products" -> verify(franchiseUseCase).addProduct("f1", "b1", name100, 10);
+            case "/api/v1/franchises/f1/name" -> verify(franchiseUseCase).updateFranchiseName("f1", name100);
+            case "/api/v1/franchises/f1/branches/b1/name" -> verify(franchiseUseCase).updateBranchName("f1", "b1", name100);
+            case "/api/v1/franchises/f1/branches/b1/products/p1/name" -> verify(franchiseUseCase).updateProductName("f1", "b1", "p1", name100);
+        }
+    }
+
+    @ParameterizedTest(name = "Longitud 101 inválida [{index}]: {0} {1} retorna 400 sin invocar useCase y sin eco del payload")
+    @MethodSource("sixNameEndpointsWithBoundaryLength")
+    void nameWith101Characters_ParameterizedAcrossSixEndpoints_ShouldReturn400WithFieldMessageAndNoPayloadEcho(
+            HttpMethod method, String uri, boolean includeStock, int unusedStatus, String expectedErrorMessage) {
+        String name101 = "X".repeat(FranchiseUseCase.NAME_MAX_LENGTH + 1);
+        String jsonBody = includeStock
+                ? "{\"name\": \"" + name101 + "\", \"stock\": 10}"
+                : "{\"name\": \"" + name101 + "\"}";
+
+        webTestClient.method(method)
+                .uri(uri)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(jsonBody)
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody(String.class)
+                .value(rawBody -> {
+                    assertThat(rawBody).contains("\"status\":400");
+                    assertThat(rawBody).contains("\"error\":\"Bad Request\"");
+                    assertThat(rawBody).contains("\"message\":\"" + expectedErrorMessage + "\"");
+                    assertThat(rawBody).contains("\"path\":\"" + uri + "\"");
+                    assertThat(rawBody).doesNotContain(name101);
+                });
+
+        verifyNoInteractions(franchiseUseCase);
+    }
 }

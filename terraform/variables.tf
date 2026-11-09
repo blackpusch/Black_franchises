@@ -54,7 +54,7 @@ variable "provider_instance_size_name" {
 }
 
 variable "db_username" {
-  description = "Nombre de usuario de base de datos"
+  description = "Nombre de usuario de base de datos (en texto plano y sin pre-codificar; outputs.tf aplica URL-encoding automaticamente en la URI)"
   type        = string
   default     = "franchise_user"
 }

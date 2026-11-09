@@ -28,6 +28,7 @@ import java.util.stream.Collectors;
  */
 public class FranchiseUseCaseImpl implements FranchiseUseCase {
 
+    public static final int NAME_MAX_LENGTH = FranchiseUseCase.NAME_MAX_LENGTH;
     private static final int MAX_OPTIMISTIC_LOCK_RETRIES = 3;
 
     private final FranchiseRepositoryPort repositoryPort;
@@ -258,6 +259,9 @@ public class FranchiseUseCaseImpl implements FranchiseUseCase {
     private String requireNonBlankName(String name, String message) {
         if (name == null || name.trim().isEmpty()) {
             throw new BadRequestException(message);
+        }
+        if (name.length() > NAME_MAX_LENGTH) {
+            throw new BadRequestException("Name must not exceed " + NAME_MAX_LENGTH + " characters");
         }
         return name.trim();
     }
