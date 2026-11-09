@@ -338,4 +338,34 @@ class MongoFranchiseRepositoryAdapterTest {
         verify(repository, never()).save(any());
         verifyNoInteractions(mongoTemplate);
     }
+
+    @Test
+    @DisplayName("findByIdReadOnly: documento legado con version null se retorna sin inicializar version ni escribir en MongoDB")
+    void shouldFindByIdReadOnlyKeepNullVersionWithoutWriteInteractions() {
+        org.springframework.data.mongodb.core.ReactiveMongoTemplate mongoTemplate =
+                org.mockito.Mockito.mock(org.springframework.data.mongodb.core.ReactiveMongoTemplate.class);
+        MongoFranchiseRepositoryAdapter adapterWithTemplate =
+                new MongoFranchiseRepositoryAdapter(repository, mapper, mongoTemplate);
+
+        FranchiseDocument legacyDoc = FranchiseDocument.builder()
+                .id("f-legacy-ro")
+                .name("Franquicia Legada RO")
+                .version(null)
+                .branches(List.of())
+                .build();
+
+        when(repository.findById("f-legacy-ro")).thenReturn(Mono.just(legacyDoc));
+
+        StepVerifier.create(adapterWithTemplate.findByIdReadOnly("f-legacy-ro"))
+                .assertNext(found -> {
+                    assertThat(found.getId()).isEqualTo("f-legacy-ro");
+                    assertThat(found.getName()).isEqualTo("Franquicia Legada RO");
+                    assertThat(found.getVersion()).isNull();
+                })
+                .verifyComplete();
+
+        assertThat(legacyDoc.getVersion()).isNull();
+        verify(repository, never()).save(any());
+        verifyNoInteractions(mongoTemplate);
+    }
 }

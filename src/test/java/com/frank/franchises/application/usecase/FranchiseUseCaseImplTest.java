@@ -394,7 +394,7 @@ class FranchiseUseCaseImplTest {
                 .branches(List.of(b1, b2))
                 .build();
 
-        when(repositoryPort.findById("f1")).thenReturn(Mono.just(franchise));
+        when(repositoryPort.findByIdReadOnly("f1")).thenReturn(Mono.just(franchise));
 
         StepVerifier.create(useCase.getTopStockProductsByBranch("f1"))
                 .assertNext(top1 -> {
@@ -410,6 +410,10 @@ class FranchiseUseCaseImplTest {
                     assertThat(top2.product().getStock()).isEqualTo(100);
                 })
                 .verifyComplete();
+
+        verify(repositoryPort, times(1)).findByIdReadOnly("f1");
+        verify(repositoryPort, never()).findById(any());
+        verify(repositoryPort, never()).save(any());
     }
 
     @Test
@@ -424,7 +428,7 @@ class FranchiseUseCaseImplTest {
                 .branches(List.of(emptyBranch, branchWithProducts))
                 .build();
 
-        when(repositoryPort.findById("f1")).thenReturn(Mono.just(franchise));
+        when(repositoryPort.findByIdReadOnly("f1")).thenReturn(Mono.just(franchise));
 
         StepVerifier.create(useCase.getTopStockProductsByBranch("f1"))
                 .assertNext(top -> {
@@ -432,6 +436,10 @@ class FranchiseUseCaseImplTest {
                     assertThat(top.product().getName()).isEqualTo("Item");
                 })
                 .verifyComplete();
+
+        verify(repositoryPort, times(1)).findByIdReadOnly("f1");
+        verify(repositoryPort, never()).findById(any());
+        verify(repositoryPort, never()).save(any());
     }
 
     @Test
@@ -442,7 +450,7 @@ class FranchiseUseCaseImplTest {
         Branch branch = Branch.builder().id("b1").name("Sucursal Empate").products(List.of(first, second)).build();
 
         Franchise franchise = Franchise.builder().id("f1").branches(List.of(branch)).build();
-        when(repositoryPort.findById("f1")).thenReturn(Mono.just(franchise));
+        when(repositoryPort.findByIdReadOnly("f1")).thenReturn(Mono.just(franchise));
 
         StepVerifier.create(useCase.getTopStockProductsByBranch("f1"))
                 .assertNext(top -> {
@@ -450,17 +458,23 @@ class FranchiseUseCaseImplTest {
                     assertThat(top.product().getName()).isEqualTo("Primero");
                 })
                 .verifyComplete();
+
+        verify(repositoryPort, times(1)).findByIdReadOnly("f1");
+        verify(repositoryPort, never()).findById(any());
+        verify(repositoryPort, never()).save(any());
     }
 
     @Test
     @DisplayName("getTopStockProductsByBranch: lanza ResourceNotFoundException si la franquicia no existe")
     void getTopStockProductsByBranch_FranchiseNotFound() {
-        when(repositoryPort.findById("f99")).thenReturn(Mono.empty());
+        when(repositoryPort.findByIdReadOnly("f99")).thenReturn(Mono.empty());
 
         StepVerifier.create(useCase.getTopStockProductsByBranch("f99"))
                 .expectError(ResourceNotFoundException.class)
                 .verify();
 
+        verify(repositoryPort, times(1)).findByIdReadOnly("f99");
+        verify(repositoryPort, never()).findById(any());
         verify(repositoryPort, never()).save(any());
     }
 
@@ -1061,7 +1075,7 @@ class FranchiseUseCaseImplTest {
                 .branches(List.of(branchWithNullProducts, validBranch))
                 .build();
 
-        when(repositoryPort.findById("f1")).thenReturn(Mono.just(franchise));
+        when(repositoryPort.findByIdReadOnly("f1")).thenReturn(Mono.just(franchise));
 
         StepVerifier.create(useCase.getTopStockProductsByBranch("f1"))
                 .assertNext(top -> {
@@ -1069,6 +1083,10 @@ class FranchiseUseCaseImplTest {
                     assertThat(top.product().getId()).isEqualTo("p1");
                 })
                 .verifyComplete();
+
+        verify(repositoryPort, times(1)).findByIdReadOnly("f1");
+        verify(repositoryPort, never()).findById(any());
+        verify(repositoryPort, never()).save(any());
     }
 
     @Test
@@ -1079,7 +1097,7 @@ class FranchiseUseCaseImplTest {
         Branch branch = Branch.builder().id("b1").name("Sucursal").products(List.of(nullStockProduct, validStockProduct)).build();
 
         Franchise franchise = Franchise.builder().id("f1").branches(List.of(branch)).build();
-        when(repositoryPort.findById("f1")).thenReturn(Mono.just(franchise));
+        when(repositoryPort.findByIdReadOnly("f1")).thenReturn(Mono.just(franchise));
 
         StepVerifier.create(useCase.getTopStockProductsByBranch("f1"))
                 .assertNext(top -> {
@@ -1087,6 +1105,10 @@ class FranchiseUseCaseImplTest {
                     assertThat(top.product().getStock()).isEqualTo(5);
                 })
                 .verifyComplete();
+
+        verify(repositoryPort, times(1)).findByIdReadOnly("f1");
+        verify(repositoryPort, never()).findById(any());
+        verify(repositoryPort, never()).save(any());
     }
 
     @Test
@@ -1097,7 +1119,7 @@ class FranchiseUseCaseImplTest {
         Branch branch = Branch.builder().id("b1").name("Sucursal").products(List.of(firstNull, secondNull)).build();
 
         Franchise franchise = Franchise.builder().id("f1").branches(List.of(branch)).build();
-        when(repositoryPort.findById("f1")).thenReturn(Mono.just(franchise));
+        when(repositoryPort.findByIdReadOnly("f1")).thenReturn(Mono.just(franchise));
 
         StepVerifier.create(useCase.getTopStockProductsByBranch("f1"))
                 .assertNext(top -> {
@@ -1105,6 +1127,10 @@ class FranchiseUseCaseImplTest {
                     assertThat(top.product().getName()).isEqualTo("Primero Null");
                 })
                 .verifyComplete();
+
+        verify(repositoryPort, times(1)).findByIdReadOnly("f1");
+        verify(repositoryPort, never()).findById(any());
+        verify(repositoryPort, never()).save(any());
     }
 
     // --- 13. Consultas GET (getAllFranchises y getFranchiseById) ---
@@ -1157,7 +1183,7 @@ class FranchiseUseCaseImplTest {
         Branch b1 = Branch.builder().id("b1").name("Sucursal Centro").products(List.of(p1)).build();
         Franchise franchise = Franchise.builder().id("f1").name("McDonalds").branches(List.of(b1)).build();
 
-        when(repositoryPort.findById("f1")).thenReturn(Mono.just(franchise));
+        when(repositoryPort.findByIdReadOnly("f1")).thenReturn(Mono.just(franchise));
 
         StepVerifier.create(useCase.getFranchiseById("f1"))
                 .assertNext(found -> {
@@ -1169,21 +1195,23 @@ class FranchiseUseCaseImplTest {
                 })
                 .verifyComplete();
 
-        verify(repositoryPort, times(1)).findById("f1");
+        verify(repositoryPort, times(1)).findByIdReadOnly("f1");
+        verify(repositoryPort, never()).findById(any());
         verify(repositoryPort, never()).save(any());
     }
 
     @Test
     @DisplayName("getFranchiseById: debe lanzar ResourceNotFoundException si la franquicia no existe")
     void getFranchiseById_NotFound_ShouldThrowResourceNotFoundException() {
-        when(repositoryPort.findById("f99")).thenReturn(Mono.empty());
+        when(repositoryPort.findByIdReadOnly("f99")).thenReturn(Mono.empty());
 
         StepVerifier.create(useCase.getFranchiseById("f99"))
                 .expectErrorMatches(err -> err instanceof ResourceNotFoundException
                         && err.getMessage().contains("f99"))
                 .verify();
 
-        verify(repositoryPort, times(1)).findById("f99");
+        verify(repositoryPort, times(1)).findByIdReadOnly("f99");
+        verify(repositoryPort, never()).findById(any());
         verify(repositoryPort, never()).save(any());
     }
 

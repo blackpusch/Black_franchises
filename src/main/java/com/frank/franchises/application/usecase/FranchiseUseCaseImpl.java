@@ -62,7 +62,7 @@ public class FranchiseUseCaseImpl implements FranchiseUseCase {
 
     @Override
     public Mono<Franchise> getFranchiseById(String franchiseId) {
-        return findFranchise(franchiseId);
+        return findFranchiseReadOnly(franchiseId);
     }
 
     @Override
@@ -146,7 +146,7 @@ public class FranchiseUseCaseImpl implements FranchiseUseCase {
 
     @Override
     public Flux<BranchTopProduct> getTopStockProductsByBranch(String franchiseId) {
-        return findFranchise(franchiseId)
+        return findFranchiseReadOnly(franchiseId)
                 .flatMapMany(franchise -> Flux.fromIterable(branchesOf(franchise)))
                 .filter(branch -> !productsOf(branch).isEmpty())
                 .flatMap(branch -> Mono.justOrEmpty(findTopProductWithFirstTieBreaker(productsOf(branch)))
@@ -296,8 +296,23 @@ public class FranchiseUseCaseImpl implements FranchiseUseCase {
         }
     }
 
+    /**
+     * Busca una franquicia por su ID para operaciones de mutación (POST, PATCH, DELETE).
+     * Delega en {@link FranchiseRepositoryPort#findById(String)}, que garantiza que los
+     * documentos legados sin {@code version} queden inicializados con {@code version = 0L}
+     * antes de ejecutar el guardado con bloqueo optimista.
+     */
     private Mono<Franchise> findFranchise(String franchiseId) {
         return repositoryPort.findById(franchiseId)
+                .switchIfEmpty(Mono.error(new ResourceNotFoundException("Franchise not found with id: " + franchiseId)));
+    }
+
+    /**
+     * Busca una franquicia por su ID en modo estrictamente de solo lectura para consultas GET
+     * ({@code getFranchiseById} y {@code getTopStockProductsByBranch}), garantizando cero escrituras en BD.
+     */
+    private Mono<Franchise> findFranchiseReadOnly(String franchiseId) {
+        return repositoryPort.findByIdReadOnly(franchiseId)
                 .switchIfEmpty(Mono.error(new ResourceNotFoundException("Franchise not found with id: " + franchiseId)));
     }
 

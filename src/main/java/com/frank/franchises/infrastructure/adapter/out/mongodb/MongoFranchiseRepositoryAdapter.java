@@ -50,10 +50,23 @@ public class MongoFranchiseRepositoryAdapter implements FranchiseRepositoryPort 
                 .map(mapper::toDomain);
     }
 
+    /**
+     * Recupera una franquicia por ID para flujos de mutación, inicializando atómicamente
+     * {@code version = 0L} si se trata de un documento legado con {@code version == null}.
+     */
     @Override
     public Mono<Franchise> findById(String id) {
         return repository.findById(id)
                 .flatMap(this::ensureVersionInitialized)
+                .map(mapper::toDomain);
+    }
+
+    /**
+     * Recupera una franquicia por ID en modo estrictamente de solo lectura (sin escrituras en MongoDB).
+     */
+    @Override
+    public Mono<Franchise> findByIdReadOnly(String id) {
+        return repository.findById(id)
                 .map(mapper::toDomain);
     }
 
@@ -76,7 +89,14 @@ public class MongoFranchiseRepositoryAdapter implements FranchiseRepositoryPort 
     /**
      * Si un documento legado en MongoDB fue creado sin campo 'version' (version == null),
      * Spring Data interpretaría save() como un INSERT nuevo y lanzaría DuplicateKeyException.
-     * Se inicializa atómicamente version = 0L en BD y en memoria al leerlo.
+     * Se inicializa atómicamente version = 0L en BD y en memoria al leerlo dentro de una mutación.
+     *
+     * Nota de seguridad ante concurrencia (#4): este método solo se invoca desde findById() en flujos
+     * de mutación envueltos por withOptimisticLockRetry. Si otra petición concurrente ya inicializó
+     * e incrementó 'version' en MongoDB antes de que se ejecute este updateFirst (matchedCount == 0),
+     * retornar el documento con version = 0L en memoria es seguro porque el save() subsiguiente
+     * fallará de forma determinista con OptimisticLockingFailureException y el mecanismo de reintento
+     * releerá el documento actualizado con su versión real desde MongoDB.
      */
     private Mono<FranchiseDocument> ensureVersionInitialized(FranchiseDocument document) {
         if (document.getVersion() != null) {
