@@ -4,7 +4,6 @@ import com.frank.franchises.domain.exception.BadRequestException;
 import com.frank.franchises.domain.exception.DuplicateResourceException;
 import com.frank.franchises.domain.exception.ResourceNotFoundException;
 import com.frank.franchises.domain.model.Branch;
-import com.frank.franchises.domain.model.BranchTopProduct;
 import com.frank.franchises.domain.model.Franchise;
 import com.frank.franchises.domain.model.Product;
 import com.frank.franchises.domain.port.out.FranchiseRepositoryPort;

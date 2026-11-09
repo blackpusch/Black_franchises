@@ -9,6 +9,19 @@ spring:
       uri: ${MONGODB_URI:mongodb://localhost:27017/franchises}
       auto-index-creation: true
 
+management:
+  endpoints:
+    web:
+      discovery:
+        enabled: false
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+
 springdoc:
   api-docs:
     path: /v3/api-docs

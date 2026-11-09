@@ -24,7 +24,7 @@ graph TD
 
     subgraph DomainCore ["Núcleo de Dominio (Domain Core)"]
         Models["Modelos: Franchise, Branch, Product, BranchTopProduct"]
-        Exceptions["Excepciones: ResourceNotFoundException, BadRequestException"]
+        Exceptions["Excepciones: ResourceNotFoundException, BadRequestException, DuplicateResourceException"]
     end
 
     subgraph DomainPortsOut ["Puertos de Salida (Domain Port Out)"]
@@ -67,6 +67,7 @@ graph TD
 | **Persistencia Reactiva** | Spring Data Reactive MongoDB | 3.3.5 |
 | **Base de Datos** | MongoDB | 7.0 |
 | **Validación** | Jakarta Validation (Hibernate Validator) | 3.0 |
+| **Observabilidad / Sondas** | Spring Boot Actuator (`/actuator/health`, `/actuator/health/liveness`) | 3.3.5 |
 | **Documentación API** | Springdoc OpenAPI Starter WebFlux UI | 2.6.0 |
 | **Productividad** | Project Lombok | 1.18.34 |
 | **Pruebas** | JUnit 5, Mockito, Reactor Test (`StepVerifier`), `WebTestClient` | 3.3.5 |
@@ -74,7 +75,7 @@ graph TD
 | **Orquestación Local** | Docker Compose | v2+ |
 | **Infraestructura como Código (IaC)** | Terraform (MongoDB Atlas Provider en AWS) | >= 1.5.0 |
 
-> 📄 Para consultar la lista completa, el desglose de versiones y el árbol de dependencias resuelto, consulta [DEPENDENCIES.md](./DEPENDENCIES.md) y [dependencies.txt](./dependencies.txt).
+> 📄 Para consultar la lista completa, el desglose de versiones y cómo generar el árbol de dependencias resuelto, consulta [DEPENDENCIES.md](./DEPENDENCIES.md).
 
 ---
 
@@ -240,11 +241,15 @@ Para ejecutar la suite completa de pruebas unitarias y de integración:
 mvn clean test
 ```
 
-### Desglose de las 45 pruebas automatizadas:
-- **`FranchiseUseCaseImplTest` (27 pruebas)**: Cobertura exhaustiva de los 9 casos de uso reactivos en escenarios exitosos (mutación de datos en memoria y persistencia), validación estricta de no invocación a `save()` ante errores 404 (`ResourceNotFoundException`), omisión de sucursales sin productos y desempate exacto de stock preservando el primer producto encontrado.
-- **`FranchiseControllerTest` (14 pruebas)**: Pruebas con `WebTestClient` sobre los 9 endpoints REST reactivos, validación de esquemas JSON y códigos HTTP (`201`, `200`, `204`), respuestas controladas de validación `400 Bad Request` por nombres en blanco o stock negativo (`-1`), manejo de `404 Not Found` y errores genéricos `500 Internal Server Error`.
-- **`MongoFranchiseRepositoryAdapterTest` (3 pruebas)**: Verificación del mapeo y persistencia reactiva contra MongoDB utilizando `StepVerifier`.
-- **`FranchisesApplicationTests` (1 prueba)**: Prueba de carga y verificación de integridad del contexto reactivo de Spring Boot.
+### Desglose de las 132 pruebas automatizadas (8 clases):
+- **`FranchiseUseCaseImplTest` (49 pruebas)**: Cobertura de los casos de uso reactivos (`createFranchise`, `getAllFranchises`, `getFranchiseById`, `addBranch`, `addProduct`, `removeProduct`, `updateProductStock`, `getTopStockProductsByBranch`, `updateFranchiseName`, `updateBranchName`, `updateProductName`), unicidad *case-insensitive*, inmutabilidad con `toBuilder()` preservando `version` en las 7 mutaciones, bloqueo optimista con reintentos acotados (`MAX_OPTIMISTIC_LOCK_RETRIES = 3`), límite máximo de nombres (`NAME_MAX_LENGTH = 100` sin `trim`), manejo seguro de listas/stocks nulos y desempate determinista.
+- **`FranchiseControllerTest` (62 pruebas)**: Pruebas con `WebTestClient` sobre los 11 endpoints REST reactivos, códigos HTTP (`201`, `200`, `204`, `400`, `404`, `409`, `500`), tests parametrizados de validación (`@NotBlank`, `@Size(max = 100)` en los 6 endpoints con nombre para 100 y 101 caracteres sin eco del payload, `@NotNull` y `@Min(0)` en stock), `ServerWebInputException` sin filtrar detalles internos de Jackson, rutas no expuestas (`NoResourceFoundException` $\rightarrow$ `404`) y contrato de errores `ErrorResponse`.
+- **`MongoFranchiseRepositoryAdapterTest` (9 pruebas)**: Verificación del adaptador reactivo de MongoDB (`save`, `findById`, `findAll` ordenado por `name` e `id` sin escrituras, `existsByNameIgnoreCase`, `existsByNameIgnoreCaseAndIdNot`, traducción de `DuplicateKeyException` a `DuplicateResourceException` e inicialización atómica de `version = 0` en documentos legados al consultar por ID).
+- **`DomainModelImmutabilityTest` (4 pruebas)**: Verificación de inmutabilidad real de `Franchise`, `Branch`, `Product` y `BranchTopProduct` (listas no modificables con `UnsupportedOperationException`, copia defensiva al construir, normalización de listas `null` conservando elementos `null` para pruebas de mappers, y verificación por reflexión de campos `final` y ausencia de setters).
+- **`FranchiseRestMapperTest` (3 pruebas)**: Pruebas unitarias directas de `FranchiseRestMapper` con entradas `null`, listas `null`, filtrado de elementos `null` y stock `null` $\rightarrow$ `0`.
+- **`FranchiseDocumentMapperTest` (3 pruebas)**: Pruebas unitarias directas de `FranchiseDocumentMapper` (`toDocument` y `toDomain`) con entradas `null`, listas `null`, elementos `null` y preservación de `version` en ida y vuelta.
+- **`MongoConnectionStringUriContractTest` (1 prueba)**: Prueba de contrato con `terraform/outputs.tf` verificando el round-trip de credenciales con caracteres reservados RFC 3986 y espacios codificados mediante `replace(urlencode(...), "+", "%20")` contra `com.mongodb.ConnectionString`.
+- **`FranchisesApplicationTests` (1 prueba)**: Prueba de carga del contexto reactivo de Spring Boot aislada con `spring.data.mongodb.auto-index-creation=false`.
 
 ---
 
@@ -287,6 +292,14 @@ terraform/
    terraform output -raw mongodb_connection_uri
    ```
 
-### Despliegue Cloud Continuo con Render (`render.yaml`):
+### Despliegue Cloud Continuo con Render (`render.yaml`) y Sondas de Salud (`Actuator`):
 
 El proyecto incluye el descriptor declarativo [render.yaml](file:///C:/Desarrollo/franchises/render.yaml) configurado para construir el contenedor Docker multi-stage de la aplicación en la nube. Simplemente conecta el repositorio GitHub en Render y suministra el valor de `MONGODB_URI` obtenido del output de Terraform.
+
+- **Exposición endurecida de Actuator**: Solo se expone el endpoint `health` (`management.endpoints.web.exposure.include: health`, `discovery.enabled: false` y `show-details: never`), de modo que `/actuator` y `/actuator/env` responden `404 Not Found` y no se filtran detalles de infraestructura.
+- **`/actuator/health` vs `/actuator/health/liveness`**:
+  - `/actuator/health` evalúa todos los indicadores de salud, incluido `ReactiveMongoHealthIndicator`: responde `200 OK` (`{"status":"UP"}`) cuando MongoDB está disponible y pasa a `503 Service Unavailable` (`{"status":"DOWN"}`) si MongoDB cae.
+  - `/actuator/health/liveness` evalúa únicamente el estado de vida del proceso JVM/WebFlux (`LivenessStateHealthIndicator`), manteniéndose en `200 OK` (`{"status":"UP"}`) aunque MongoDB sufra una interrupción temporal.
+- **Uso en Docker y recomendación para Render**:
+  - En [`Dockerfile`](file:///C:/Desarrollo/franchises/Dockerfile) y [`docker-compose.yml`](file:///C:/Desarrollo/franchises/docker-compose.yml) el `HEALTHCHECK` consulta `http://127.0.0.1:${PORT:-8080}/actuator/health/liveness` mediante el binario nativo `wget` de Alpine (sin instalar paquetes adicionales), evitando que el orquestador reinicie en bucle el contenedor de la API por un corte transitorio de base de datos.
+  - En [`render.yaml`](file:///C:/Desarrollo/franchises/render.yaml) se configura `healthCheckPath: /actuator/health/liveness` como opción recomendada porque Render utiliza esa misma ruta tanto en el arranque como para el monitoreo continuo de vida (evitando reinicios del contenedor ante micro-cortes de red hacia MongoDB Atlas; si se prefiere bloquear el despliegue inicial cuando `MONGODB_URI` no conecte y asumir reinicios si Atlas cae, puede cambiarse a `/actuator/health` o `/actuator/health/readiness`).

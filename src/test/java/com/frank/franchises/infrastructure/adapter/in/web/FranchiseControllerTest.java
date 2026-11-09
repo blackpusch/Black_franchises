@@ -29,7 +29,6 @@ import java.util.List;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -732,6 +731,23 @@ class FranchiseControllerTest {
                     assertThat(rawBody).contains("\"path\":\"" + uri + "\"");
                     assertThat(rawBody).doesNotContain(name101);
                 });
+
+        verifyNoInteractions(franchiseUseCase);
+    }
+
+    @Test
+    @DisplayName("NoResourceFoundException: rutas no expuestas como /actuator o /actuator/env deben retornar 404 Not Found y no 500")
+    void unmappedRouteOrHiddenActuatorEndpoint_ShouldReturn404NotFound() {
+        for (String path : List.of("/actuator", "/actuator/env")) {
+            webTestClient.get()
+                    .uri(path)
+                    .exchange()
+                    .expectStatus().isNotFound()
+                    .expectBody()
+                    .jsonPath("$.status").isEqualTo(404)
+                    .jsonPath("$.error").isEqualTo("Not Found")
+                    .jsonPath("$.path").isEqualTo(path);
+        }
 
         verifyNoInteractions(franchiseUseCase);
     }
