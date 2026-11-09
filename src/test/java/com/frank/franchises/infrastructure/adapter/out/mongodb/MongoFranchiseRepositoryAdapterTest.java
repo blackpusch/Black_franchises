@@ -15,6 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.Sort;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -188,8 +189,8 @@ class MongoFranchiseRepositoryAdapterTest {
     }
 
     @Test
-    @DisplayName("Debe mapear DuplicateKeyException del índice único de MongoDB a DuplicateResourceException de dominio")
-    void shouldMapDuplicateKeyExceptionToDuplicateResourceException() {
+    @DisplayName("Debe mapear DuplicateKeyException del índice único uk_franchise_name_ci a DuplicateResourceException de dominio")
+    void shouldMapDuplicateKeyExceptionToDuplicateResourceExceptionWhenNameIndexViolated() {
         Franchise franchise = Franchise.builder()
                 .id("f1")
                 .name("McDonalds")
@@ -197,11 +198,32 @@ class MongoFranchiseRepositoryAdapterTest {
                 .build();
 
         when(repository.save(any(FranchiseDocument.class)))
-                .thenReturn(Mono.error(new org.springframework.dao.DuplicateKeyException("E11000 duplicate key error uk_franchise_name_ci")));
+                .thenReturn(Mono.error(new DuplicateKeyException(
+                        "E11000 duplicate key error collection: franchises.franchises index: "
+                                + FranchiseDocument.NAME_UNIQUE_INDEX + " dup key: { name: \"McDonalds\" }")));
 
         StepVerifier.create(adapter.save(franchise))
                 .expectErrorMatches(err -> err instanceof com.frank.franchises.domain.exception.DuplicateResourceException
-                        && err.getMessage().contains("McDonalds"))
+                        && err.getMessage().equals("Franchise already exists with name: McDonalds"))
+                .verify();
+    }
+
+    @Test
+    @DisplayName("No debe traducir DuplicateKeyException a DuplicateResourceException cuando proviene de otro índice distinto a uk_franchise_name_ci")
+    void shouldNotMapDuplicateKeyExceptionWhenOtherIndexViolated() {
+        Franchise franchise = Franchise.builder()
+                .id("f1")
+                .name("McDonalds")
+                .branches(List.of())
+                .build();
+
+        DuplicateKeyException idDuplicateEx = new DuplicateKeyException(
+                "E11000 duplicate key error collection: franchises.franchises index: _id_ dup key: { _id: \"f1\" }");
+        when(repository.save(any(FranchiseDocument.class)))
+                .thenReturn(Mono.error(idDuplicateEx));
+
+        StepVerifier.create(adapter.save(franchise))
+                .expectErrorMatches(err -> err == idDuplicateEx)
                 .verify();
     }
 

@@ -45,8 +45,12 @@ public class MongoFranchiseRepositoryAdapter implements FranchiseRepositoryPort 
         return Mono.justOrEmpty(franchise)
                 .map(mapper::toDocument)
                 .flatMap(repository::save)
-                .onErrorMap(DuplicateKeyException.class, ex ->
-                        new DuplicateResourceException("Franchise already exists with name: " + franchise.getName()))
+                .onErrorMap(DuplicateKeyException.class, ex -> {
+                    if (ex.getMessage() != null && ex.getMessage().contains(FranchiseDocument.NAME_UNIQUE_INDEX)) {
+                        return new DuplicateResourceException("Franchise already exists with name: " + franchise.getName());
+                    }
+                    return ex;
+                })
                 .map(mapper::toDomain);
     }
 

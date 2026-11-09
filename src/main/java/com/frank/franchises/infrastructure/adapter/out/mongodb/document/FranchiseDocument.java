@@ -19,10 +19,12 @@ import java.util.List;
 @Document(collection = "franchises", collation = "{ 'locale': 'en', 'strength': 2 }")
 public class FranchiseDocument {
 
+    public static final String NAME_UNIQUE_INDEX = "uk_franchise_name_ci";
+
     @Id
     private String id;
 
-    @Indexed(name = "uk_franchise_name_ci", unique = true, collation = "{ 'locale': 'en', 'strength': 2 }")
+    @Indexed(name = NAME_UNIQUE_INDEX, unique = true, collation = "{ 'locale': 'en', 'strength': 2 }")
     private String name;
 
     @Version
