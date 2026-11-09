@@ -5,6 +5,11 @@ import io.swagger.v3.oas.annotations.info.Contact;
 import io.swagger.v3.oas.annotations.info.Info;
 import io.swagger.v3.oas.annotations.info.License;
 import io.swagger.v3.oas.annotations.servers.Server;
+import io.swagger.v3.oas.models.media.Content;
+import io.swagger.v3.oas.models.media.MediaType;
+import io.swagger.v3.oas.models.media.Schema;
+import org.springdoc.core.customizers.OperationCustomizer;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
@@ -27,4 +32,23 @@ import org.springframework.context.annotation.Configuration;
         }
 )
 public class OpenApiConfig {
+
+    @Bean
+    public OperationCustomizer errorResponseOperationCustomizer() {
+        return (operation, handlerMethod) -> {
+            if (operation.getResponses() != null) {
+                operation.getResponses().forEach((statusCode, apiResponse) -> {
+                    if (statusCode.startsWith("4") || statusCode.startsWith("5")) {
+                        Schema<?> errorSchema = new Schema<>().$ref("#/components/schemas/ErrorResponse");
+                        Content content = new Content().addMediaType(
+                                org.springframework.http.MediaType.APPLICATION_JSON_VALUE,
+                                new MediaType().schema(errorSchema)
+                        );
+                        apiResponse.setContent(content);
+                    }
+                });
+            }
+            return operation;
+        };
+    }
 }
