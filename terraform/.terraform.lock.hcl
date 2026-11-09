@@ -5,7 +5,9 @@ provider "registry.terraform.io/mongodb/mongodbatlas" {
   version     = "1.41.2"
   constraints = "~> 1.15"
   hashes = [
+    "h1:Q6xeuE/9mAvM80+9svVHtot8Q16U5B0+mcjXmZJ0IKE=",
     "h1:k8nKmRT/GQhktlZ/5adRxu2EMd+TeGi2H35DaMsJFT8=",
+    "h1:nfV/4l/DjzNCzAPUecKAVWZ6yb07fOss4l9Of7Jx7sQ=",
     "zh:1309d1c231f8f4f354882e9f791de3e12aad08480a6412ee088a9d01695a920e",
     "zh:1dc46bf99e066e61bd401dda93bb1ded889e7233e9967dd980b7fdeedbab7f4e",
     "zh:2e8098acdcf11609d93119879381f86c04c2d07dc9f19bfb8390d2f20ff840be",

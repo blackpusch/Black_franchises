@@ -15,7 +15,7 @@ import org.springframework.context.annotation.Configuration;
                 description = "API REST Reactiva no bloqueante construida con Spring Boot 3 WebFlux y MongoDB Reactivo para la gestión integral de franquicias, sucursales y productos con control de stock.",
                 contact = @Contact(
                         name = "Frank",
-                        email = "frank@example.com"
+                        url = "https://github.com/blackpusch/Black_franchises"
                 ),
                 license = @License(
                         name = "Apache 2.0",
