@@ -7,7 +7,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.ErrorResponseException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.bind.support.WebExchangeBindException;
@@ -76,6 +78,39 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.BAD_REQUEST, "Formato de petición JSON inválido o malformado", exchange);
     }
 
+    @ExceptionHandler(ErrorResponseException.class)
+    public ResponseEntity<ErrorResponse> handleErrorResponseException(ErrorResponseException ex, ServerWebExchange exchange) {
+        HttpStatus status = HttpStatus.resolve(ex.getStatusCode().value());
+        if (status == null) {
+            status = HttpStatus.INTERNAL_SERVER_ERROR;
+        }
+        String path = exchange.getRequest().getPath().value();
+        if (status.is4xxClientError()) {
+            log.warn("Error HTTP {} en [{}]: {}", status.value(), path, ex.getMessage());
+        } else {
+            log.error("Error HTTP {} en [{}]: {}", status.value(), path, ex.getMessage(), ex);
+        }
+        String message = switch (status) {
+            case METHOD_NOT_ALLOWED -> "Método HTTP no permitido para esta ruta";
+            case NOT_ACCEPTABLE -> "Formato de respuesta solicitado (Accept) no soportado";
+            case UNSUPPORTED_MEDIA_TYPE -> "Tipo de contenido (Content-Type) no soportado";
+            default -> status.is4xxClientError()
+                    ? "Solicitud HTTP inválida"
+                    : "Ocurrió un error interno en el servidor";
+        };
+        ErrorResponse response = new ErrorResponse(
+                Instant.now(),
+                status.value(),
+                status.getReasonPhrase(),
+                message,
+                path
+        );
+        return ResponseEntity.status(status)
+                .headers(ex.getHeaders())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(response);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGenericException(Exception ex, ServerWebExchange exchange) {
         log.error("Excepción no controlada en [{}]: {}", exchange.getRequest().getPath().value(), ex.getMessage(), ex);
@@ -94,6 +129,8 @@ public class GlobalExceptionHandler {
                 message,
                 exchange.getRequest().getPath().value()
         );
-        return ResponseEntity.status(status).body(response);
+        return ResponseEntity.status(status)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(response);
     }
 }

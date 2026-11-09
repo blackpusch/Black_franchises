@@ -20,6 +20,7 @@ import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Flux;
@@ -748,6 +749,79 @@ class FranchiseControllerTest {
                     .jsonPath("$.error").isEqualTo("Not Found")
                     .jsonPath("$.path").isEqualTo(path);
         }
+
+        verifyNoInteractions(franchiseUseCase);
+    }
+
+    @Test
+    @DisplayName("Error 405: PUT /api/v1/franchises debe retornar 405 Method Not Allowed conservando cabecera Allow y mensaje fijo")
+    void methodNotAllowed_PutOnFranchises_ShouldReturn405WithAllowHeader() {
+        webTestClient.put()
+                .uri("/api/v1/franchises")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"name\": \"McDonalds\"}")
+                .exchange()
+                .expectStatus().isEqualTo(HttpStatus.METHOD_NOT_ALLOWED)
+                .expectHeader().exists("Allow")
+                .expectHeader().value("Allow", allow -> assertThat(allow).contains("GET", "POST"))
+                .expectBody()
+                .jsonPath("$.status").isEqualTo(405)
+                .jsonPath("$.error").isEqualTo("Method Not Allowed")
+                .jsonPath("$.message").isEqualTo("Método HTTP no permitido para esta ruta")
+                .jsonPath("$.path").isEqualTo("/api/v1/franchises");
+
+        verifyNoInteractions(franchiseUseCase);
+    }
+
+    @Test
+    @DisplayName("Error 405: DELETE /api/v1/franchises debe retornar 405 Method Not Allowed conservando cabecera Allow y mensaje fijo")
+    void methodNotAllowed_DeleteOnFranchises_ShouldReturn405WithAllowHeader() {
+        webTestClient.delete()
+                .uri("/api/v1/franchises")
+                .exchange()
+                .expectStatus().isEqualTo(HttpStatus.METHOD_NOT_ALLOWED)
+                .expectHeader().exists("Allow")
+                .expectHeader().value("Allow", allow -> assertThat(allow).contains("GET", "POST"))
+                .expectBody()
+                .jsonPath("$.status").isEqualTo(405)
+                .jsonPath("$.error").isEqualTo("Method Not Allowed")
+                .jsonPath("$.message").isEqualTo("Método HTTP no permitido para esta ruta")
+                .jsonPath("$.path").isEqualTo("/api/v1/franchises");
+
+        verifyNoInteractions(franchiseUseCase);
+    }
+
+    @Test
+    @DisplayName("Error 415: POST /api/v1/franchises con Content-Type text/plain debe retornar 415 Unsupported Media Type con mensaje fijo")
+    void unsupportedMediaType_TextPlainOnPost_ShouldReturn415() {
+        webTestClient.post()
+                .uri("/api/v1/franchises")
+                .contentType(MediaType.TEXT_PLAIN)
+                .bodyValue("McDonalds")
+                .exchange()
+                .expectStatus().isEqualTo(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+                .expectBody()
+                .jsonPath("$.status").isEqualTo(415)
+                .jsonPath("$.error").isEqualTo("Unsupported Media Type")
+                .jsonPath("$.message").isEqualTo("Tipo de contenido (Content-Type) no soportado")
+                .jsonPath("$.path").isEqualTo("/api/v1/franchises");
+
+        verifyNoInteractions(franchiseUseCase);
+    }
+
+    @Test
+    @DisplayName("Error 406: GET /api/v1/franchises con Accept application/xml debe retornar 406 Not Acceptable con mensaje fijo")
+    void notAcceptable_ApplicationXmlOnGet_ShouldReturn406() {
+        webTestClient.get()
+                .uri("/api/v1/franchises")
+                .accept(MediaType.APPLICATION_XML)
+                .exchange()
+                .expectStatus().isEqualTo(HttpStatus.NOT_ACCEPTABLE)
+                .expectBody()
+                .jsonPath("$.status").isEqualTo(406)
+                .jsonPath("$.error").isEqualTo("Not Acceptable")
+                .jsonPath("$.message").isEqualTo("Formato de respuesta solicitado (Accept) no soportado")
+                .jsonPath("$.path").isEqualTo("/api/v1/franchises");
 
         verifyNoInteractions(franchiseUseCase);
     }
