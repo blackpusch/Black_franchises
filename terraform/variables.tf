@@ -57,6 +57,11 @@ variable "db_username" {
   description = "Nombre de usuario de base de datos (en texto plano y sin pre-codificar; outputs.tf aplica URL-encoding automaticamente en la URI)"
   type        = string
   default     = "franchise_user"
+
+  validation {
+    condition     = length(trimspace(var.db_username)) > 0
+    error_message = "db_username no puede estar vacio ni contener solo espacios en blanco."
+  }
 }
 
 variable "db_password" {
