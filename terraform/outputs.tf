@@ -16,5 +16,5 @@ output "standard_srv_connection_string" {
 output "mongodb_connection_uri" {
   description = "URI completa de conexion reactiva lista para inyectar en MONGODB_URI de Spring Boot"
   sensitive   = true
-  value       = "mongodb+srv://${var.db_username}:${var.db_password}@${replace(mongodbatlas_advanced_cluster.cluster.connection_strings[0].standard_srv, "mongodb+srv://", "")}/${var.database_name}?retryWrites=true&w=majority"
+  value       = "mongodb+srv://${replace(urlencode(var.db_username), "+", "%20")}:${replace(urlencode(var.db_password), "+", "%20")}@${replace(mongodbatlas_advanced_cluster.cluster.connection_strings[0].standard_srv, "mongodb+srv://", "")}/${var.database_name}?retryWrites=true&w=majority"
 }

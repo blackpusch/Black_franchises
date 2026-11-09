@@ -11,6 +11,7 @@ import com.frank.franchises.infrastructure.adapter.in.web.dto.ProductResponse;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 public final class FranchiseRestMapper {
 
@@ -25,6 +26,7 @@ public final class FranchiseRestMapper {
         List<BranchResponse> branches = domain.getBranches() == null
                 ? Collections.emptyList()
                 : domain.getBranches().stream()
+                        .filter(Objects::nonNull)
                         .map(FranchiseRestMapper::toResponse)
                         .toList();
 
@@ -43,6 +45,7 @@ public final class FranchiseRestMapper {
         List<ProductResponse> products = domain.getProducts() == null
                 ? Collections.emptyList()
                 : domain.getProducts().stream()
+                        .filter(Objects::nonNull)
                         .map(FranchiseRestMapper::toResponse)
                         .toList();
 

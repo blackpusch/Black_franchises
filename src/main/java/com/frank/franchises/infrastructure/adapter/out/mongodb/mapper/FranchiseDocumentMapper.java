@@ -9,8 +9,8 @@ import com.frank.franchises.infrastructure.adapter.out.mongodb.document.ProductD
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 @Component
 public class FranchiseDocumentMapper {
@@ -23,12 +23,14 @@ public class FranchiseDocumentMapper {
         List<BranchDocument> branchDocuments = domain.getBranches() == null
                 ? new ArrayList<>()
                 : domain.getBranches().stream()
+                        .filter(Objects::nonNull)
                         .map(this::toBranchDocument)
                         .toList();
 
         return FranchiseDocument.builder()
                 .id(domain.getId())
                 .name(domain.getName())
+                .version(domain.getVersion())
                 .branches(new ArrayList<>(branchDocuments))
                 .build();
     }
@@ -41,12 +43,14 @@ public class FranchiseDocumentMapper {
         List<Branch> branches = document.getBranches() == null
                 ? new ArrayList<>()
                 : document.getBranches().stream()
+                        .filter(Objects::nonNull)
                         .map(this::toBranchDomain)
                         .toList();
 
         return Franchise.builder()
                 .id(document.getId())
                 .name(document.getName())
+                .version(document.getVersion())
                 .branches(new ArrayList<>(branches))
                 .build();
     }
@@ -59,6 +63,7 @@ public class FranchiseDocumentMapper {
         List<ProductDocument> productDocuments = domain.getProducts() == null
                 ? new ArrayList<>()
                 : domain.getProducts().stream()
+                        .filter(Objects::nonNull)
                         .map(this::toProductDocument)
                         .toList();
 
@@ -77,6 +82,7 @@ public class FranchiseDocumentMapper {
         List<Product> products = document.getProducts() == null
                 ? new ArrayList<>()
                 : document.getProducts().stream()
+                        .filter(Objects::nonNull)
                         .map(this::toProductDomain)
                         .toList();
 

@@ -1,5 +1,7 @@
 package com.frank.franchises.infrastructure.adapter.in.web;
 
+import com.frank.franchises.domain.exception.BadRequestException;
+import com.frank.franchises.domain.exception.DuplicateResourceException;
 import com.frank.franchises.domain.exception.ResourceNotFoundException;
 import com.frank.franchises.domain.model.Branch;
 import com.frank.franchises.domain.model.BranchTopProduct;
@@ -10,21 +12,29 @@ import com.frank.franchises.infrastructure.adapter.in.web.dto.*;
 import com.frank.franchises.infrastructure.adapter.in.web.error.GlobalExceptionHandler;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
+import java.util.stream.Stream;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @WebFluxTest(controllers = FranchiseController.class)
@@ -241,6 +251,8 @@ class FranchiseControllerTest {
                 .jsonPath("$.error").isEqualTo("Bad Request")
                 .jsonPath("$.message").value(msg -> org.assertj.core.api.Assertions.assertThat((String) msg).contains("name"))
                 .jsonPath("$.path").isEqualTo("/api/v1/franchises");
+
+        verifyNoInteractions(franchiseUseCase);
     }
 
     @Test
@@ -258,6 +270,8 @@ class FranchiseControllerTest {
                 .jsonPath("$.status").isEqualTo(400)
                 .jsonPath("$.message").value(msg -> org.assertj.core.api.Assertions.assertThat((String) msg).contains("stock"))
                 .jsonPath("$.path").isEqualTo("/api/v1/franchises/f1/branches/b1/products");
+
+        verifyNoInteractions(franchiseUseCase);
     }
 
     @Test
@@ -274,6 +288,8 @@ class FranchiseControllerTest {
                 .expectBody()
                 .jsonPath("$.status").isEqualTo(400)
                 .jsonPath("$.path").isEqualTo("/api/v1/franchises/f1/branches/b1/products/p1/stock");
+
+        verifyNoInteractions(franchiseUseCase);
     }
 
     @Test
@@ -316,5 +332,326 @@ class FranchiseControllerTest {
                 .jsonPath("$.error").isEqualTo("Internal Server Error")
                 .jsonPath("$.message").isEqualTo("Ocurrió un error interno en el servidor")
                 .jsonPath("$.path").isEqualTo("/api/v1/franchises");
+    }
+
+    @Test
+    @DisplayName("Error 409: OptimisticLockingFailureException debe retornar 409 Conflict y no quedar tapado por el handler 500")
+    void conflictError_OptimisticLockingFailureException() {
+        when(franchiseUseCase.updateProductStock(eq("f1"), eq("b1"), eq("p1"), anyInt()))
+                .thenReturn(Mono.error(new org.springframework.dao.OptimisticLockingFailureException("Conflicto de versión")));
+
+        UpdateStockRequest request = new UpdateStockRequest(50);
+
+        webTestClient.patch()
+                .uri("/api/v1/franchises/{id}/branches/{bid}/products/{pid}/stock", "f1", "b1", "p1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(request)
+                .exchange()
+                .expectStatus().isEqualTo(409)
+                .expectBody()
+                .jsonPath("$.status").isEqualTo(409)
+                .jsonPath("$.error").isEqualTo("Conflict")
+                .jsonPath("$.path").isEqualTo("/api/v1/franchises/f1/branches/b1/products/p1/stock");
+    }
+
+    @Test
+    @DisplayName("Error 409: DuplicateResourceException debe retornar 409 Conflict con el detalle del duplicado")
+    void conflictError_DuplicateResourceException() {
+        when(franchiseUseCase.addBranch(eq("f1"), anyString()))
+                .thenReturn(Mono.error(new DuplicateResourceException("Branch already exists with name: Sucursal Norte")));
+
+        CreateBranchRequest request = new CreateBranchRequest("Sucursal Norte");
+
+        webTestClient.post()
+                .uri("/api/v1/franchises/{id}/branches", "f1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(request)
+                .exchange()
+                .expectStatus().isEqualTo(409)
+                .expectBody()
+                .jsonPath("$.status").isEqualTo(409)
+                .jsonPath("$.error").isEqualTo("Conflict")
+                .jsonPath("$.message").isEqualTo("Branch already exists with name: Sucursal Norte")
+                .jsonPath("$.path").isEqualTo("/api/v1/franchises/f1/branches");
+    }
+
+    @Test
+    @DisplayName("Error 400: BadRequestException de dominio debe retornar 400 Bad Request")
+    void badRequestError_DomainBadRequestException() {
+        when(franchiseUseCase.createFranchise(anyString()))
+                .thenReturn(Mono.error(new BadRequestException("Franchise name must not be blank")));
+
+        CreateFranchiseRequest request = new CreateFranchiseRequest("ValidoEnDtoPeroRechazadoEnDominio");
+
+        webTestClient.post()
+                .uri("/api/v1/franchises")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(request)
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody()
+                .jsonPath("$.status").isEqualTo(400)
+                .jsonPath("$.error").isEqualTo("Bad Request")
+                .jsonPath("$.message").isEqualTo("Franchise name must not be blank")
+                .jsonPath("$.path").isEqualTo("/api/v1/franchises");
+    }
+
+    // --- Tests de Consulta GET (/api/v1/franchises y /api/v1/franchises/{id}) ---
+
+    @Test
+    @DisplayName("GET /api/v1/franchises: debe retornar 200 OK y lista vacía [] cuando no hay franquicias")
+    void getAllFranchises_Empty_Returns200AndEmptyArray() {
+        when(franchiseUseCase.getAllFranchises()).thenReturn(Flux.empty());
+
+        webTestClient.get()
+                .uri("/api/v1/franchises")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.length()").isEqualTo(0);
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/franchises: debe retornar 200 OK con el árbol completo de sucursales y productos sin exponer version")
+    void getAllFranchises_Success_Returns200WithFullTreeAndNoVersion() {
+        Product product = Product.builder().id("p1").name("Big Mac").stock(50).build();
+        Branch branch = Branch.builder().id("b1").name("Sucursal Centro").products(List.of(product)).build();
+        Franchise f1 = Franchise.builder().id("f1").name("McDonalds").version(3L).branches(List.of(branch)).build();
+        Franchise f2 = Franchise.builder().id("f2").name("Wendy's").version(1L).branches(List.of()).build();
+
+        when(franchiseUseCase.getAllFranchises()).thenReturn(Flux.just(f1, f2));
+
+        webTestClient.get()
+                .uri("/api/v1/franchises")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.length()").isEqualTo(2)
+                .jsonPath("$[0].id").isEqualTo("f1")
+                .jsonPath("$[0].name").isEqualTo("McDonalds")
+                .jsonPath("$[0].version").doesNotExist()
+                .jsonPath("$[0].branches.length()").isEqualTo(1)
+                .jsonPath("$[0].branches[0].id").isEqualTo("b1")
+                .jsonPath("$[0].branches[0].name").isEqualTo("Sucursal Centro")
+                .jsonPath("$[0].branches[0].products.length()").isEqualTo(1)
+                .jsonPath("$[0].branches[0].products[0].id").isEqualTo("p1")
+                .jsonPath("$[0].branches[0].products[0].name").isEqualTo("Big Mac")
+                .jsonPath("$[0].branches[0].products[0].stock").isEqualTo(50)
+                .jsonPath("$[1].id").isEqualTo("f2")
+                .jsonPath("$[1].name").isEqualTo("Wendy's")
+                .jsonPath("$[1].version").doesNotExist()
+                .jsonPath("$[1].branches.length()").isEqualTo(0);
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/franchises/{id}: debe retornar 200 OK con la franquicia, sucursales y productos sin exponer version")
+    void getFranchiseById_Success_Returns200WithFullTreeAndNoVersion() {
+        Product product = Product.builder().id("p1").name("Whopper").stock(35).build();
+        Branch branch = Branch.builder().id("b1").name("Sucursal Norte").products(List.of(product)).build();
+        Franchise franchise = Franchise.builder().id("f1").name("Burger King").version(5L).branches(List.of(branch)).build();
+
+        when(franchiseUseCase.getFranchiseById("f1")).thenReturn(Mono.just(franchise));
+
+        webTestClient.get()
+                .uri("/api/v1/franchises/{id}", "f1")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.id").isEqualTo("f1")
+                .jsonPath("$.name").isEqualTo("Burger King")
+                .jsonPath("$.version").doesNotExist()
+                .jsonPath("$.branches.length()").isEqualTo(1)
+                .jsonPath("$.branches[0].id").isEqualTo("b1")
+                .jsonPath("$.branches[0].name").isEqualTo("Sucursal Norte")
+                .jsonPath("$.branches[0].products.length()").isEqualTo(1)
+                .jsonPath("$.branches[0].products[0].id").isEqualTo("p1")
+                .jsonPath("$.branches[0].products[0].name").isEqualTo("Whopper")
+                .jsonPath("$.branches[0].products[0].stock").isEqualTo(35);
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/franchises/{id}: debe retornar 404 Not Found con el mismo esquema ErrorResponse cuando no existe")
+    void getFranchiseById_NotFound_Returns404WithErrorResponse() {
+        when(franchiseUseCase.getFranchiseById("f99"))
+                .thenReturn(Mono.error(new ResourceNotFoundException("Franchise not found with id: f99")));
+
+        webTestClient.get()
+                .uri("/api/v1/franchises/{id}", "f99")
+                .exchange()
+                .expectStatus().isNotFound()
+                .expectBody()
+                .jsonPath("$.timestamp").isNotEmpty()
+                .jsonPath("$.status").isEqualTo(404)
+                .jsonPath("$.error").isEqualTo("Not Found")
+                .jsonPath("$.message").isEqualTo("Franchise not found with id: f99")
+                .jsonPath("$.path").isEqualTo("/api/v1/franchises/f99");
+    }
+
+    // --- Hallazgo #9: ServerWebInputException y Validaciones Parametrizadas por Endpoint ---
+
+    static Stream<Arguments> malformedInputPayloads() {
+        return Stream.of(
+                Arguments.of(HttpMethod.POST, "/api/v1/franchises", "{\"name\": "),
+                Arguments.of(HttpMethod.POST, "/api/v1/franchises/f1/branches/b1/products", "{\"name\": \"Papas\", \"stock\": \"no-es-numero\"}"),
+                Arguments.of(HttpMethod.PATCH, "/api/v1/franchises/f1/branches/b1/products/p1/stock", "{\"stock\": \"invalido\"}")
+        );
+    }
+
+    @ParameterizedTest(name = "ServerWebInputException [{index}]: {0} {1} con JSON inválido debe retornar 400 sin filtrar detalles de Jackson")
+    @MethodSource("malformedInputPayloads")
+    void malformedJsonOrInvalidType_ShouldReturn400StandardErrorResponseWithoutLeakingJacksonDetails(
+            HttpMethod method, String uri, String rawBody) {
+        webTestClient.method(method)
+                .uri(uri)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(rawBody)
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody()
+                .consumeWith(result -> {
+                    String fullBody = new String(result.getResponseBodyContent(), java.nio.charset.StandardCharsets.UTF_8);
+                    assertThat(fullBody)
+                            .doesNotContainIgnoringCase("jackson")
+                            .doesNotContainIgnoringCase("com.fasterxml")
+                            .doesNotContainIgnoringCase("Cannot deserialize")
+                            .doesNotContainIgnoringCase("java.");
+                })
+                .jsonPath("$.timestamp").isNotEmpty()
+                .jsonPath("$.status").isEqualTo(400)
+                .jsonPath("$.error").isEqualTo("Bad Request")
+                .jsonPath("$.message").value(msg -> {
+                    String text = (String) msg;
+                    assertThat(text).isEqualTo("Formato de petición JSON inválido o malformado");
+                    assertThat(text)
+                            .doesNotContainIgnoringCase("jackson")
+                            .doesNotContainIgnoringCase("JsonParseException")
+                            .doesNotContainIgnoringCase("InvalidFormatException")
+                            .doesNotContainIgnoringCase("Cannot deserialize")
+                            .doesNotContainIgnoringCase("com.fasterxml")
+                            .doesNotContainIgnoringCase("java.")
+                            .doesNotContainIgnoringCase("Failed to read HTTP message");
+                })
+                .jsonPath("$.path").isEqualTo(uri);
+
+        verifyNoInteractions(franchiseUseCase);
+    }
+
+    @Test
+    @DisplayName("Validación @Valid: debe conservar su mensaje específico por campo y NO caer en el texto fijo de JSON malformado")
+    void validationError_ShouldPreserveFieldMessageAndNotFallIntoGenericMalformedJsonText() {
+        webTestClient.post()
+                .uri("/api/v1/franchises")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"name\": \"   \"}")
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody()
+                .jsonPath("$.status").isEqualTo(400)
+                .jsonPath("$.error").isEqualTo("Bad Request")
+                .jsonPath("$.message").value(msg -> {
+                    String text = (String) msg;
+                    assertThat(text).isEqualTo("name: El nombre de la franquicia es obligatorio");
+                    assertThat(text).isNotEqualTo("Formato de petición JSON inválido o malformado");
+                })
+                .jsonPath("$.path").isEqualTo("/api/v1/franchises");
+
+        verifyNoInteractions(franchiseUseCase);
+    }
+
+    static Stream<Arguments> invalidValidationPayloadsByEndpoint() {
+        return Stream.of(
+                // 1. POST /api/v1/franchises (CreateFranchiseRequest)
+                Arguments.of(HttpMethod.POST, "/api/v1/franchises", "{\"name\": null}", "name"),
+                Arguments.of(HttpMethod.POST, "/api/v1/franchises", "{\"name\": \"\"}", "name"),
+                Arguments.of(HttpMethod.POST, "/api/v1/franchises", "{\"name\": \"   \"}", "name"),
+
+                // 2. POST /api/v1/franchises/f1/branches (CreateBranchRequest)
+                Arguments.of(HttpMethod.POST, "/api/v1/franchises/f1/branches", "{\"name\": null}", "name"),
+                Arguments.of(HttpMethod.POST, "/api/v1/franchises/f1/branches", "{\"name\": \"\"}", "name"),
+                Arguments.of(HttpMethod.POST, "/api/v1/franchises/f1/branches", "{\"name\": \"   \"}", "name"),
+
+                // 3. POST /api/v1/franchises/f1/branches/b1/products (CreateProductRequest: name y stock)
+                Arguments.of(HttpMethod.POST, "/api/v1/franchises/f1/branches/b1/products", "{\"name\": null, \"stock\": 10}", "name"),
+                Arguments.of(HttpMethod.POST, "/api/v1/franchises/f1/branches/b1/products", "{\"name\": \"\", \"stock\": 10}", "name"),
+                Arguments.of(HttpMethod.POST, "/api/v1/franchises/f1/branches/b1/products", "{\"name\": \"   \", \"stock\": 10}", "name"),
+                Arguments.of(HttpMethod.POST, "/api/v1/franchises/f1/branches/b1/products", "{\"name\": \"Papas\", \"stock\": null}", "stock"),
+                Arguments.of(HttpMethod.POST, "/api/v1/franchises/f1/branches/b1/products", "{\"name\": \"Papas\", \"stock\": -1}", "stock"),
+
+                // 4. PATCH /api/v1/franchises/f1/branches/b1/products/p1/stock (UpdateStockRequest)
+                Arguments.of(HttpMethod.PATCH, "/api/v1/franchises/f1/branches/b1/products/p1/stock", "{\"stock\": null}", "stock"),
+                Arguments.of(HttpMethod.PATCH, "/api/v1/franchises/f1/branches/b1/products/p1/stock", "{\"stock\": -1}", "stock"),
+
+                // 5. PATCH /api/v1/franchises/f1/name (UpdateNameRequest - Franquicia)
+                Arguments.of(HttpMethod.PATCH, "/api/v1/franchises/f1/name", "{\"name\": null}", "name"),
+                Arguments.of(HttpMethod.PATCH, "/api/v1/franchises/f1/name", "{\"name\": \"\"}", "name"),
+                Arguments.of(HttpMethod.PATCH, "/api/v1/franchises/f1/name", "{\"name\": \"   \"}", "name"),
+
+                // 6. PATCH /api/v1/franchises/f1/branches/b1/name (UpdateNameRequest - Sucursal)
+                Arguments.of(HttpMethod.PATCH, "/api/v1/franchises/f1/branches/b1/name", "{\"name\": null}", "name"),
+                Arguments.of(HttpMethod.PATCH, "/api/v1/franchises/f1/branches/b1/name", "{\"name\": \"\"}", "name"),
+                Arguments.of(HttpMethod.PATCH, "/api/v1/franchises/f1/branches/b1/name", "{\"name\": \"   \"}", "name"),
+
+                // 7. PATCH /api/v1/franchises/f1/branches/b1/products/p1/name (UpdateNameRequest - Producto)
+                Arguments.of(HttpMethod.PATCH, "/api/v1/franchises/f1/branches/b1/products/p1/name", "{\"name\": null}", "name"),
+                Arguments.of(HttpMethod.PATCH, "/api/v1/franchises/f1/branches/b1/products/p1/name", "{\"name\": \"\"}", "name"),
+                Arguments.of(HttpMethod.PATCH, "/api/v1/franchises/f1/branches/b1/products/p1/name", "{\"name\": \"   \"}", "name")
+        );
+    }
+
+    @ParameterizedTest(name = "Validación 400 [{index}]: {0} {1} con campo inválido ''{3}''")
+    @MethodSource("invalidValidationPayloadsByEndpoint")
+    void validationErrors_ParameterizedByEndpoint_ShouldReturn400AndNeverCallUseCase(
+            HttpMethod method, String uri, String jsonBody, String expectedField) {
+        webTestClient.method(method)
+                .uri(uri)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(jsonBody)
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody()
+                .jsonPath("$.timestamp").isNotEmpty()
+                .jsonPath("$.status").isEqualTo(400)
+                .jsonPath("$.error").isEqualTo("Bad Request")
+                .jsonPath("$.message").value(msg -> assertThat((String) msg).contains(expectedField))
+                .jsonPath("$.path").isEqualTo(uri);
+
+        verifyNoInteractions(franchiseUseCase);
+    }
+
+    static Stream<Arguments> zeroStockValidEndpoints() {
+        return Stream.of(
+                Arguments.of(HttpMethod.POST, "/api/v1/franchises/f1/branches/b1/products", "{\"name\": \"Agua\", \"stock\": 0}", 201),
+                Arguments.of(HttpMethod.PATCH, "/api/v1/franchises/f1/branches/b1/products/p1/stock", "{\"stock\": 0}", 200)
+        );
+    }
+
+    @ParameterizedTest(name = "Stock 0 válido [{index}]: {0} {1} debe retornar {3}")
+    @MethodSource("zeroStockValidEndpoints")
+    void zeroStock_ParameterizedByEndpoint_ShouldBeAcceptedAsValid(
+            HttpMethod method, String uri, String jsonBody, int expectedStatus) {
+        Product productZero = Product.builder().id("p1").name("Agua").stock(0).build();
+        Branch branch = Branch.builder().id("b1").name("Sucursal 1").products(List.of(productZero)).build();
+        Franchise saved = Franchise.builder().id("f1").name("Franquicia").branches(List.of(branch)).build();
+
+        if (method == HttpMethod.POST) {
+            when(franchiseUseCase.addProduct("f1", "b1", "Agua", 0)).thenReturn(Mono.just(saved));
+        } else {
+            when(franchiseUseCase.updateProductStock("f1", "b1", "p1", 0)).thenReturn(Mono.just(saved));
+        }
+
+        webTestClient.method(method)
+                .uri(uri)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(jsonBody)
+                .exchange()
+                .expectStatus().isEqualTo(expectedStatus)
+                .expectBody()
+                .jsonPath("$.branches[0].products[0].stock").isEqualTo(0);
+
+        if (method == HttpMethod.POST) {
+            verify(franchiseUseCase).addProduct("f1", "b1", "Agua", 0);
+        } else {
+            verify(franchiseUseCase).updateProductStock("f1", "b1", "p1", 0);
+        }
     }
 }

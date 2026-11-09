@@ -48,7 +48,7 @@ graph TD
 ```
 
 ### Principales aspectos de la arquitectura:
-- **Capa de Dominio (`domain`)**: 100% pura en Java 21, sin dependencias de Spring, Spring Data o Jakarta EE. Define las entidades inmutables y de dominio con Lombok, excepciones de negocio y los contratos de entrada (`FranchiseUseCase`) y salida (`FranchiseRepositoryPort`).
+- **Capa de Dominio (`domain`)**: 100% pura en Java 21, sin dependencias de Spring, Spring Data o Jakarta EE. Define las entidades de dominio inmutables (`Franchise`, `Branch`, `Product` con campos `private final`, sin setters, `@Getter`, `@Builder(toBuilder = true)` y colecciones envueltas con copia defensiva en `Collections.unmodifiableList`, además del `record` `BranchTopProduct`), excepciones de negocio y los contratos de entrada (`FranchiseUseCase`) y salida (`FranchiseRepositoryPort`).
 - **Capa de Aplicación (`application.usecase`)**: Implementación funcional y reactiva de los casos de uso (`FranchiseUseCaseImpl`), libre de `@Service` o `@Component`. El bean se expone mediante `UseCaseConfig` en infraestructura.
 - **Capa de Infraestructura (`infrastructure`)**:
   - `adapter.in.web`: Controlador REST reactivo, DTOs (`record`), validaciones Jakarta, manejador global de excepciones (`GlobalExceptionHandler`) y mapper web (`FranchiseRestMapper`).
@@ -119,6 +119,10 @@ $env:MONGODB_URI="mongodb://localhost:27017/franchises"
 mvn spring-boot:run
 ```
 
+> **⚠️ Nota de despliegue sobre el índice único de franquicias (`uk_franchise_name_ci`)**:
+> Al iniciar la aplicación con `spring.data.mongodb.auto-index-creation: true`, MongoDB crea automáticamente el índice único `uk_franchise_name_ci` sobre el campo `name` con colación *case-insensitive* (`locale: 'en', strength: 2`). Si despliegas sobre una base de datos preexistente que ya contenga documentos en la colección `franchises`, **debes limpiar o consolidar previamente cualquier nombre de franquicia duplicado (ignorando mayúsculas/minúsculas)** antes de que se cree el índice; de lo contrario, MongoDB rechazará la construcción del índice con `E11000 duplicate key error`.
+> *(Limitación de pruebas: dado que `FranchisesApplicationTests` desactiva `auto-index-creation` para aislar la carga del contexto sin requerir un servidor MongoDB activo, la creación efectiva del índice `uk_franchise_name_ci` y su colación fueron verificadas manualmente contra el contenedor MongoDB real y no mediante un test automatizado).*
+
 ---
 
 ## 📖 4. Documentación Interactiva (Swagger UI)
@@ -137,14 +141,20 @@ Ruta base de la API: `/api/v1/franchises`
 | # | Método | Endpoint | Descripción | Código HTTP |
 | :--- | :--- | :--- | :--- | :--- |
 | **1** | `POST` | `/api/v1/franchises` | Crear una nueva franquicia | `201 Created` |
-| **2** | `POST` | `/api/v1/franchises/{fId}/branches` | Agregar una sucursal a una franquicia | `201 Created` |
-| **3** | `POST` | `/api/v1/franchises/{fId}/branches/{bId}/products` | Agregar un producto con stock a una sucursal | `201 Created` |
-| **4** | `DELETE`| `/api/v1/franchises/{fId}/branches/{bId}/products/{pId}` | Eliminar un producto de una sucursal | `204 No Content` |
-| **5** | `PATCH`| `/api/v1/franchises/{fId}/branches/{bId}/products/{pId}/stock` | Modificar el stock de un producto | `200 OK` |
-| **6** | `GET` | `/api/v1/franchises/{fId}/top-stock-products` | Obtener el producto con más stock por sucursal | `200 OK` |
-| **7** | `PATCH`| `/api/v1/franchises/{fId}/name` | [PLUS] Actualizar el nombre de una franquicia | `200 OK` |
-| **8** | `PATCH`| `/api/v1/franchises/{fId}/branches/{bId}/name` | [PLUS] Actualizar el nombre de una sucursal | `200 OK` |
-| **9** | `PATCH`| `/api/v1/franchises/{fId}/branches/{bId}/products/{pId}/name` | [PLUS] Actualizar el nombre de un producto | `200 OK` |
+| **2** | `GET` | `/api/v1/franchises` | Listar todas las franquicias (sin paginación, ordenadas por `name` e `id`) | `200 OK` |
+| **3** | `GET` | `/api/v1/franchises/{fId}` | Obtener una franquicia por ID con sus sucursales y productos | `200 OK` / `404` |
+| **4** | `POST` | `/api/v1/franchises/{fId}/branches` | Agregar una sucursal a una franquicia | `201 Created` |
+| **5** | `POST` | `/api/v1/franchises/{fId}/branches/{bId}/products` | Agregar un producto con stock a una sucursal | `201 Created` |
+| **6** | `DELETE`| `/api/v1/franchises/{fId}/branches/{bId}/products/{pId}` | Eliminar un producto de una sucursal | `204 No Content` |
+| **7** | `PATCH`| `/api/v1/franchises/{fId}/branches/{bId}/products/{pId}/stock` | Modificar el stock de un producto | `200 OK` |
+| **8** | `GET` | `/api/v1/franchises/{fId}/top-stock-products` | Obtener el producto con más stock por sucursal | `200 OK` |
+| **9** | `PATCH`| `/api/v1/franchises/{fId}/name` | [PLUS] Actualizar el nombre de una franquicia | `200 OK` |
+| **10** | `PATCH`| `/api/v1/franchises/{fId}/branches/{bId}/name` | [PLUS] Actualizar el nombre de una sucursal | `200 OK` |
+| **11** | `PATCH`| `/api/v1/franchises/{fId}/branches/{bId}/products/{pId}/name` | [PLUS] Actualizar el nombre de un producto | `200 OK` |
+
+> **ℹ️ Notas de comportamiento en los endpoints de consulta (`GET`)**:
+> - **Listado sin paginación (`GET /api/v1/franchises`)**: Retorna todas las franquicias de la colección ordenadas de forma determinista por `name` (ascendente) y luego por `id` (ascendente), sin paginación. Esta operación es **100% de solo lectura** (no realiza escrituras en MongoDB ni altera documentos legados sin campo `version`).
+> - **Consulta por ID (`GET /api/v1/franchises/{fId}`)**: Reutiliza `findById`, por lo que si el documento consultado es un **documento legado sin campo `version`**, inicializa atómicamente `version = 0` en MongoDB para dejarlo preparado ante futuras actualizaciones con bloqueo optimista (`@Version`). En ningún caso se expone el campo `version` en el DTO de respuesta `FranchiseResponse`.
 
 ---
 
@@ -155,6 +165,16 @@ Ruta base de la API: `/api/v1/franchises`
 curl -X POST http://localhost:8080/api/v1/franchises \
   -H "Content-Type: application/json" \
   -d '{"name": "McDonalds"}'
+```
+
+#### 1.1. Listar todas las franquicias
+```bash
+curl -X GET http://localhost:8080/api/v1/franchises
+```
+
+#### 1.2. Consultar una franquicia por ID
+```bash
+curl -X GET http://localhost:8080/api/v1/franchises/<FRANCHISE_ID>
 ```
 
 #### 2. Agregar sucursal a una franquicia
@@ -243,7 +263,7 @@ terraform/
 ### Pasos para desplegar la base de datos en MongoDB Atlas:
 
 1. **Configurar credenciales**:
-   Copia el archivo de ejemplo y ajusta tus claves de API de MongoDB Atlas:
+   Copia el archivo de ejemplo y ajusta tus claves de API de MongoDB Atlas (`db_password` debe definirse en **texto plano y sin pre-codificar**, ya que `mongodbatlas_database_user` recibe la contraseña literal y `outputs.tf` se encarga automáticamente de aplicar URL-encoding al construir `mongodb_connection_uri`):
    ```bash
    cd terraform
    cp terraform.tfvars.example terraform.tfvars

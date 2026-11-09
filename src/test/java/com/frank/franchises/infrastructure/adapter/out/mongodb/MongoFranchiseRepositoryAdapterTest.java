@@ -12,8 +12,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Sort;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -21,7 +24,9 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -57,12 +62,14 @@ class MongoFranchiseRepositoryAdapterTest {
         Franchise franchise = Franchise.builder()
                 .id("f1")
                 .name("Franquicia Central")
+                .version(1L)
                 .branches(List.of(branch))
                 .build();
 
         FranchiseDocument savedDocument = FranchiseDocument.builder()
                 .id("f1")
                 .name("Franquicia Central")
+                .version(2L)
                 .branches(List.of(
                         BranchDocument.builder()
                                 .id("b1")
@@ -87,6 +94,7 @@ class MongoFranchiseRepositoryAdapterTest {
                     assertThat(saved).isNotNull();
                     assertThat(saved.getId()).isEqualTo("f1");
                     assertThat(saved.getName()).isEqualTo("Franquicia Central");
+                    assertThat(saved.getVersion()).isEqualTo(2L);
                     assertThat(saved.getBranches()).hasSize(1);
 
                     Branch savedBranch = saved.getBranches().getFirst();
@@ -122,6 +130,7 @@ class MongoFranchiseRepositoryAdapterTest {
                     assertThat(found).isNotNull();
                     assertThat(found.getId()).isEqualTo("f1");
                     assertThat(found.getName()).isEqualTo("Franquicia Express");
+                    assertThat(found.getVersion()).isEqualTo(0L);
                     assertThat(found.getBranches()).isEmpty();
                 })
                 .verifyComplete();
@@ -140,5 +149,193 @@ class MongoFranchiseRepositoryAdapterTest {
                 .verifyComplete();
 
         verify(repository).findById("f99");
+    }
+
+    @Test
+    @DisplayName("Debe inicializar version=0L en MongoDB cuando se lee un documento legado con version null")
+    void shouldInitializeVersionInMongoWhenLegacyDocumentHasNullVersion() {
+        org.springframework.data.mongodb.core.ReactiveMongoTemplate mongoTemplate =
+                org.mockito.Mockito.mock(org.springframework.data.mongodb.core.ReactiveMongoTemplate.class);
+        MongoFranchiseRepositoryAdapter adapterWithTemplate =
+                new MongoFranchiseRepositoryAdapter(repository, mapper, mongoTemplate);
+
+        FranchiseDocument legacyDocument = FranchiseDocument.builder()
+                .id("f-legacy")
+                .name("Franquicia Legada")
+                .version(null)
+                .branches(List.of())
+                .build();
+
+        when(repository.findById("f-legacy")).thenReturn(Mono.just(legacyDocument));
+        when(mongoTemplate.updateFirst(
+                any(org.springframework.data.mongodb.core.query.Query.class),
+                any(org.springframework.data.mongodb.core.query.Update.class),
+                org.mockito.ArgumentMatchers.eq(FranchiseDocument.class)
+        )).thenReturn(Mono.just(com.mongodb.client.result.UpdateResult.acknowledged(1L, 1L, null)));
+
+        StepVerifier.create(adapterWithTemplate.findById("f-legacy"))
+                .assertNext(found -> {
+                    assertThat(found.getId()).isEqualTo("f-legacy");
+                    assertThat(found.getVersion()).isEqualTo(0L);
+                })
+                .verifyComplete();
+
+        verify(mongoTemplate).updateFirst(
+                any(org.springframework.data.mongodb.core.query.Query.class),
+                any(org.springframework.data.mongodb.core.query.Update.class),
+                org.mockito.ArgumentMatchers.eq(FranchiseDocument.class)
+        );
+    }
+
+    @Test
+    @DisplayName("Debe mapear DuplicateKeyException del índice único de MongoDB a DuplicateResourceException de dominio")
+    void shouldMapDuplicateKeyExceptionToDuplicateResourceException() {
+        Franchise franchise = Franchise.builder()
+                .id("f1")
+                .name("McDonalds")
+                .branches(List.of())
+                .build();
+
+        when(repository.save(any(FranchiseDocument.class)))
+                .thenReturn(Mono.error(new org.springframework.dao.DuplicateKeyException("E11000 duplicate key error uk_franchise_name_ci")));
+
+        StepVerifier.create(adapter.save(franchise))
+                .expectErrorMatches(err -> err instanceof com.frank.franchises.domain.exception.DuplicateResourceException
+                        && err.getMessage().contains("McDonalds"))
+                .verify();
+    }
+
+    @Test
+    @DisplayName("Debe delegar existsByNameIgnoreCase y existsByNameIgnoreCaseAndIdNot al repositorio reactivo")
+    void shouldDelegateExistenceQueriesToRepository() {
+        when(repository.existsByNameIgnoreCase("KFC")).thenReturn(Mono.just(true));
+        when(repository.existsByNameIgnoreCaseAndIdNot("KFC", "f1")).thenReturn(Mono.just(false));
+
+        StepVerifier.create(adapter.existsByNameIgnoreCase("KFC"))
+                .expectNext(true)
+                .verifyComplete();
+
+        StepVerifier.create(adapter.existsByNameIgnoreCaseAndIdNot("KFC", "f1"))
+                .expectNext(false)
+                .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("FranchiseDocumentMapper.toDomain: debe normalizar listas null de branches y products a listas vacías")
+    void shouldNormalizeNullBranchesAndProductsToEmptyLists() {
+        FranchiseDocument docWithNullBranches = FranchiseDocument.builder()
+                .id("f1")
+                .name("Franquicia Sin Lista")
+                .version(1L)
+                .branches(null)
+                .build();
+
+        Franchise domain1 = mapper.toDomain(docWithNullBranches);
+        assertThat(domain1.getBranches()).isNotNull().isEmpty();
+
+        BranchDocument branchWithNullProducts = BranchDocument.builder()
+                .id("b1")
+                .name("Sucursal Sin Lista")
+                .products(null)
+                .build();
+        FranchiseDocument docWithNullProducts = FranchiseDocument.builder()
+                .id("f2")
+                .name("Franquicia Con Sucursal")
+                .version(1L)
+                .branches(List.of(branchWithNullProducts))
+                .build();
+
+        Franchise domain2 = mapper.toDomain(docWithNullProducts);
+        assertThat(domain2.getBranches()).hasSize(1);
+        assertThat(domain2.getBranches().getFirst().getProducts()).isNotNull().isEmpty();
+    }
+
+    @Test
+    @DisplayName("findAll: debe ordenar por name ASC y luego id ASC sin realizar interacciones de escritura")
+    void shouldFindAllOrderedByNameAndIdWithoutWriteInteractions() {
+        org.springframework.data.mongodb.core.ReactiveMongoTemplate mongoTemplate =
+                org.mockito.Mockito.mock(org.springframework.data.mongodb.core.ReactiveMongoTemplate.class);
+        MongoFranchiseRepositoryAdapter adapterWithTemplate =
+                new MongoFranchiseRepositoryAdapter(repository, mapper, mongoTemplate);
+
+        FranchiseDocument doc1 = FranchiseDocument.builder()
+                .id("f2")
+                .name("Acme")
+                .version(1L)
+                .branches(List.of(
+                        BranchDocument.builder()
+                                .id("b1")
+                                .name("Sucursal Central")
+                                .products(List.of(
+                                        ProductDocument.builder().id("p1").name("Combo 1").stock(10).build()
+                                ))
+                                .build()
+                ))
+                .build();
+        FranchiseDocument doc2 = FranchiseDocument.builder()
+                .id("f1")
+                .name("Burger King")
+                .version(2L)
+                .branches(List.of())
+                .build();
+
+        when(repository.findAll(any(Sort.class))).thenReturn(Flux.just(doc1, doc2));
+
+        StepVerifier.create(adapterWithTemplate.findAll())
+                .assertNext(first -> {
+                    assertThat(first.getId()).isEqualTo("f2");
+                    assertThat(first.getName()).isEqualTo("Acme");
+                    assertThat(first.getBranches()).hasSize(1);
+                    assertThat(first.getBranches().getFirst().getProducts()).hasSize(1);
+                    assertThat(first.getBranches().getFirst().getProducts().getFirst().getName()).isEqualTo("Combo 1");
+                })
+                .assertNext(second -> {
+                    assertThat(second.getId()).isEqualTo("f1");
+                    assertThat(second.getName()).isEqualTo("Burger King");
+                    assertThat(second.getBranches()).isEmpty();
+                })
+                .verifyComplete();
+
+        ArgumentCaptor<Sort> sortCaptor = ArgumentCaptor.forClass(Sort.class);
+        verify(repository).findAll(sortCaptor.capture());
+        Sort capturedSort = sortCaptor.getValue();
+        assertThat(capturedSort.toList())
+                .containsExactly(
+                        Sort.Order.asc("name"),
+                        Sort.Order.asc("id")
+                );
+
+        verify(repository, never()).save(any());
+        verifyNoInteractions(mongoTemplate);
+    }
+
+    @Test
+    @DisplayName("findAll: documento legado con version null no dispara inicialización ni escrituras en MongoDB")
+    void shouldFindAllKeepNullVersionWithoutInitializingInMongo() {
+        org.springframework.data.mongodb.core.ReactiveMongoTemplate mongoTemplate =
+                org.mockito.Mockito.mock(org.springframework.data.mongodb.core.ReactiveMongoTemplate.class);
+        MongoFranchiseRepositoryAdapter adapterWithTemplate =
+                new MongoFranchiseRepositoryAdapter(repository, mapper, mongoTemplate);
+
+        FranchiseDocument legacyDoc = FranchiseDocument.builder()
+                .id("f-legacy")
+                .name("Franquicia Legada")
+                .version(null)
+                .branches(List.of())
+                .build();
+
+        when(repository.findAll(any(Sort.class))).thenReturn(Flux.just(legacyDoc));
+
+        StepVerifier.create(adapterWithTemplate.findAll())
+                .assertNext(found -> {
+                    assertThat(found.getId()).isEqualTo("f-legacy");
+                    assertThat(found.getName()).isEqualTo("Franquicia Legada");
+                    assertThat(found.getVersion()).isNull();
+                })
+                .verifyComplete();
+
+        assertThat(legacyDoc.getVersion()).isNull();
+        verify(repository, never()).save(any());
+        verifyNoInteractions(mongoTemplate);
     }
 }

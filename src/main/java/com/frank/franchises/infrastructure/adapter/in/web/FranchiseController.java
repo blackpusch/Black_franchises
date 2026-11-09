@@ -2,8 +2,10 @@ package com.frank.franchises.infrastructure.adapter.in.web;
 
 import com.frank.franchises.domain.port.in.FranchiseUseCase;
 import com.frank.franchises.infrastructure.adapter.in.web.dto.*;
+import com.frank.franchises.infrastructure.adapter.in.web.error.ErrorResponse;
 import com.frank.franchises.infrastructure.adapter.in.web.mapper.FranchiseRestMapper;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -31,10 +33,39 @@ public class FranchiseController {
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Franquicia creada exitosamente",
                     content = @Content(schema = @Schema(implementation = FranchiseResponse.class))),
-            @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos")
+            @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos"),
+            @ApiResponse(responseCode = "409", description = "Ya existe una franquicia con el mismo nombre")
     })
     public Mono<FranchiseResponse> createFranchise(@Valid @RequestBody CreateFranchiseRequest request) {
         return franchiseUseCase.createFranchise(request.name())
+                .map(FranchiseRestMapper::toResponse);
+    }
+
+    // a.1) Listar todas las franquicias
+    @GetMapping
+    @Operation(summary = "Listar franquicias",
+            description = "Retorna el listado completo de franquicias (con su árbol de sucursales y productos) ordenado por nombre e id, sin paginación")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Listado de franquicias obtenido exitosamente",
+                    content = @Content(array = @ArraySchema(schema = @Schema(implementation = FranchiseResponse.class))))
+    })
+    public Flux<FranchiseResponse> getAllFranchises() {
+        return franchiseUseCase.getAllFranchises()
+                .map(FranchiseRestMapper::toResponse);
+    }
+
+    // a.2) Obtener una franquicia por su ID
+    @GetMapping("/{franchiseId}")
+    @Operation(summary = "Obtener franquicia por ID",
+            description = "Retorna el detalle de una franquicia específica con todas sus sucursales y productos")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Franquicia encontrada",
+                    content = @Content(schema = @Schema(implementation = FranchiseResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Franquicia no encontrada",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public Mono<FranchiseResponse> getFranchiseById(@PathVariable String franchiseId) {
+        return franchiseUseCase.getFranchiseById(franchiseId)
                 .map(FranchiseRestMapper::toResponse);
     }
 
@@ -46,7 +77,8 @@ public class FranchiseController {
             @ApiResponse(responseCode = "201", description = "Sucursal agregada exitosamente",
                     content = @Content(schema = @Schema(implementation = FranchiseResponse.class))),
             @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos"),
-            @ApiResponse(responseCode = "404", description = "Franquicia no encontrada")
+            @ApiResponse(responseCode = "404", description = "Franquicia no encontrada"),
+            @ApiResponse(responseCode = "409", description = "Conflicto de concurrencia o nombre de sucursal duplicado")
     })
     public Mono<FranchiseResponse> addBranch(
             @PathVariable String franchiseId,
@@ -63,7 +95,8 @@ public class FranchiseController {
             @ApiResponse(responseCode = "201", description = "Producto agregado exitosamente",
                     content = @Content(schema = @Schema(implementation = FranchiseResponse.class))),
             @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos"),
-            @ApiResponse(responseCode = "404", description = "Franquicia o sucursal no encontrada")
+            @ApiResponse(responseCode = "404", description = "Franquicia o sucursal no encontrada"),
+            @ApiResponse(responseCode = "409", description = "Conflicto de concurrencia o nombre de producto duplicado")
     })
     public Mono<FranchiseResponse> addProduct(
             @PathVariable String franchiseId,
@@ -79,7 +112,8 @@ public class FranchiseController {
     @Operation(summary = "Eliminar producto", description = "Elimina un producto existente de una sucursal específica")
     @ApiResponses({
             @ApiResponse(responseCode = "204", description = "Producto eliminado exitosamente"),
-            @ApiResponse(responseCode = "404", description = "Franquicia, sucursal o producto no encontrado")
+            @ApiResponse(responseCode = "404", description = "Franquicia, sucursal o producto no encontrado"),
+            @ApiResponse(responseCode = "409", description = "Conflicto de concurrencia")
     })
     public Mono<Void> removeProduct(
             @PathVariable String franchiseId,
@@ -95,7 +129,8 @@ public class FranchiseController {
             @ApiResponse(responseCode = "200", description = "Stock actualizado exitosamente",
                     content = @Content(schema = @Schema(implementation = FranchiseResponse.class))),
             @ApiResponse(responseCode = "400", description = "Stock inválido"),
-            @ApiResponse(responseCode = "404", description = "Franquicia, sucursal o producto no encontrado")
+            @ApiResponse(responseCode = "404", description = "Franquicia, sucursal o producto no encontrado"),
+            @ApiResponse(responseCode = "409", description = "Conflicto de concurrencia")
     })
     public Mono<FranchiseResponse> updateProductStock(
             @PathVariable String franchiseId,
@@ -126,7 +161,8 @@ public class FranchiseController {
             @ApiResponse(responseCode = "200", description = "Nombre de franquicia actualizado",
                     content = @Content(schema = @Schema(implementation = FranchiseResponse.class))),
             @ApiResponse(responseCode = "400", description = "Nombre inválido"),
-            @ApiResponse(responseCode = "404", description = "Franquicia no encontrada")
+            @ApiResponse(responseCode = "404", description = "Franquicia no encontrada"),
+            @ApiResponse(responseCode = "409", description = "Conflicto de concurrencia o nombre de franquicia duplicado")
     })
     public Mono<FranchiseResponse> updateFranchiseName(
             @PathVariable String franchiseId,
@@ -142,7 +178,8 @@ public class FranchiseController {
             @ApiResponse(responseCode = "200", description = "Nombre de sucursal actualizado",
                     content = @Content(schema = @Schema(implementation = FranchiseResponse.class))),
             @ApiResponse(responseCode = "400", description = "Nombre inválido"),
-            @ApiResponse(responseCode = "404", description = "Franquicia o sucursal no encontrada")
+            @ApiResponse(responseCode = "404", description = "Franquicia o sucursal no encontrada"),
+            @ApiResponse(responseCode = "409", description = "Conflicto de concurrencia o nombre de sucursal duplicado")
     })
     public Mono<FranchiseResponse> updateBranchName(
             @PathVariable String franchiseId,
@@ -159,7 +196,8 @@ public class FranchiseController {
             @ApiResponse(responseCode = "200", description = "Nombre de producto actualizado",
                     content = @Content(schema = @Schema(implementation = FranchiseResponse.class))),
             @ApiResponse(responseCode = "400", description = "Nombre inválido"),
-            @ApiResponse(responseCode = "404", description = "Franquicia, sucursal o producto no encontrado")
+            @ApiResponse(responseCode = "404", description = "Franquicia, sucursal o producto no encontrado"),
+            @ApiResponse(responseCode = "409", description = "Conflicto de concurrencia o nombre de producto duplicado")
     })
     public Mono<FranchiseResponse> updateProductName(
             @PathVariable String franchiseId,

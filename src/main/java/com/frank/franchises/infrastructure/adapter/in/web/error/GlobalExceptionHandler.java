@@ -1,9 +1,11 @@
 package com.frank.franchises.infrastructure.adapter.in.web.error;
 
 import com.frank.franchises.domain.exception.BadRequestException;
+import com.frank.franchises.domain.exception.DuplicateResourceException;
 import com.frank.franchises.domain.exception.ResourceNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -30,6 +32,21 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.BAD_REQUEST, ex.getMessage(), exchange);
     }
 
+    @ExceptionHandler(DuplicateResourceException.class)
+    public ResponseEntity<ErrorResponse> handleDuplicateResource(DuplicateResourceException ex, ServerWebExchange exchange) {
+        return buildResponse(HttpStatus.CONFLICT, ex.getMessage(), exchange);
+    }
+
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    public ResponseEntity<ErrorResponse> handleOptimisticLockingFailure(OptimisticLockingFailureException ex, ServerWebExchange exchange) {
+        log.warn("Conflicto de concurrencia agotados los reintentos en [{}]: {}", exchange.getRequest().getPath().value(), ex.getMessage());
+        return buildResponse(
+                HttpStatus.CONFLICT,
+                "El recurso fue modificado concurrentemente por otra operación. Por favor, intente de nuevo",
+                exchange
+        );
+    }
+
     @ExceptionHandler(WebExchangeBindException.class)
     public ResponseEntity<ErrorResponse> handleValidation(WebExchangeBindException ex, ServerWebExchange exchange) {
         String errors = ex.getFieldErrors().stream()
@@ -45,8 +62,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ServerWebInputException.class)
     public ResponseEntity<ErrorResponse> handleMalformedInput(ServerWebInputException ex, ServerWebExchange exchange) {
-        String detail = ex.getReason() != null ? ex.getReason() : "Formato de petición JSON inválido o malformado";
-        return buildResponse(HttpStatus.BAD_REQUEST, detail, exchange);
+        log.warn("Entrada HTTP inválida o JSON malformado en [{}]: {}", exchange.getRequest().getPath().value(), ex.getMessage());
+        return buildResponse(HttpStatus.BAD_REQUEST, "Formato de petición JSON inválido o malformado", exchange);
     }
 
     @ExceptionHandler(Exception.class)

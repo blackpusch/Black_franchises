@@ -2,22 +2,24 @@ package com.frank.franchises.domain.model;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.ToString;
 
 import java.util.UUID;
 
-@Data
-@Builder
-@NoArgsConstructor
+@Getter
+@ToString
+@EqualsAndHashCode
+@Builder(toBuilder = true)
 @AllArgsConstructor
 public class Product {
 
     @Builder.Default
-    private String id = UUID.randomUUID().toString();
+    private final String id = UUID.randomUUID().toString();
 
-    private String name;
+    private final String name;
 
     @Builder.Default
-    private Integer stock = 0;
+    private final Integer stock = 0;
 }

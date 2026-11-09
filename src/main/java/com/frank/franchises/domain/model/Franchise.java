@@ -1,25 +1,36 @@
 package com.frank.franchises.domain.model;
 
-import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.ToString;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
-@Data
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
+@Getter
+@ToString
+@EqualsAndHashCode
+@Builder(toBuilder = true)
 public class Franchise {
 
     @Builder.Default
-    private String id = UUID.randomUUID().toString();
+    private final String id = UUID.randomUUID().toString();
 
-    private String name;
+    private final String name;
 
-    @Builder.Default
-    private List<Branch> branches = new ArrayList<>();
+    private final Long version;
+
+    private final List<Branch> branches;
+
+    public Franchise(String id, String name, Long version, List<Branch> branches) {
+        this.id = id;
+        this.name = name;
+        this.version = version;
+        this.branches = Collections.unmodifiableList(
+                branches == null ? new ArrayList<>() : new ArrayList<>(branches)
+        );
+    }
 }

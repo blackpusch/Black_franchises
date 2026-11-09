@@ -32,3 +32,16 @@ target/
 *.log
 .DS_Store
 Thumbs.db
+
+### Terraform / IaC & Secrets ###
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfvars
+*.tfvars.json
+tfplan
+*.tfplan
+.env
+*.env

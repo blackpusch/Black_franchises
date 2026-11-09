@@ -9,6 +9,10 @@ public interface FranchiseUseCase {
 
     Mono<Franchise> createFranchise(String name);
 
+    Flux<Franchise> getAllFranchises();
+
+    Mono<Franchise> getFranchiseById(String franchiseId);
+
     Mono<Franchise> addBranch(String franchiseId, String branchName);
 
     Mono<Franchise> addProduct(String franchiseId, String branchId, String productName, int stock);
