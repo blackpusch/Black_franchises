@@ -8,4 +8,6 @@ provider_instance_size_name = "M0"
 db_username                = "franchise_user"
 db_password                = "ChangeMeStrongPassword2026!"
 database_name              = "franchises"
+# ADVERTENCIA DE SEGURIDAD: 0.0.0.0/0 permite conexiones desde cualquier IP publica.
+# Usese solo para pruebas o contenedores sin IP de salida fija; en produccion restrinja al CIDR especifico de su infraestructura.
 whitelist_cidr             = "0.0.0.0/0"

@@ -77,7 +77,11 @@ variable "database_name" {
 }
 
 variable "whitelist_cidr" {
-  description = "Bloque CIDR permitido en la lista de acceso de red (0.0.0.0/0 para contenedores cloud/serverless)"
+  description = "Bloque CIDR permitido en la lista de acceso de red de MongoDB Atlas (restringir a las IPs estaticas de salida del entorno en produccion; evitar 0.0.0.0/0 salvo entornos efimeros de prueba)"
   type        = string
-  default     = "0.0.0.0/0"
+
+  validation {
+    condition     = length(trimspace(var.whitelist_cidr)) > 0 && can(cidrhost(var.whitelist_cidr, 0))
+    error_message = "whitelist_cidr debe ser un bloque CIDR IPv4 valido y no vacio (por ejemplo, '203.0.113.10/32')."
+  }
 }
