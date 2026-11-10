@@ -46,7 +46,7 @@ public class MongoFranchiseRepositoryAdapter implements FranchiseRepositoryPort 
                 .map(mapper::toDocument)
                 .flatMap(repository::save)
                 .onErrorMap(DuplicateKeyException.class, ex -> {
-                    if (ex.getMessage() != null && ex.getMessage().contains(FranchiseDocument.NAME_UNIQUE_INDEX)) {
+                    if (isFranchiseNameUniqueIndexViolation(ex)) {
                         return new DuplicateResourceException("Franchise already exists with name: " + franchise.getName());
                     }
                     return ex;
@@ -114,5 +114,14 @@ public class MongoFranchiseRepositoryAdapter implements FranchiseRepositoryPort 
         Update initVersion = new Update().set("version", 0L);
         return mongoTemplate.updateFirst(legacyQuery, initVersion, FranchiseDocument.class)
                 .thenReturn(document);
+    }
+
+    /**
+     * Comprueba si la excepción de clave duplicada proviene del índice único de nombre de franquicia.
+     * Nota: depende de que el mensaje de error E11000 de MongoDB nombre explícitamente el índice
+     * ({@link FranchiseDocument#NAME_UNIQUE_INDEX}), comportamiento verificado con MongoDB 7.
+     */
+    private boolean isFranchiseNameUniqueIndexViolation(DuplicateKeyException ex) {
+        return ex.getMessage() != null && ex.getMessage().contains(FranchiseDocument.NAME_UNIQUE_INDEX);
     }
 }
