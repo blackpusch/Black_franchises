@@ -81,6 +81,8 @@ graph TD
 
 ## ⚙️ 3. Requisitos Previos y Ejecución Local
 
+> 📘 **Guía rápida paso a paso**: Si quieres un manual detallado de cómo levantar la API, dónde abrir **Swagger UI** en el navegador y cómo probar todo el flujo desde PowerShell o Git Bash, consulta **[MANUAL_EJECUCION.md](./MANUAL_EJECUCION.md)**.
+
 ### Opción 1: Con Docker Compose (Recomendada)
 
 Levanta la base de datos MongoDB 7.0 (con persistencia en volumen y healthcheck) y la API en contenedores aislados:
