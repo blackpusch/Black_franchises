@@ -162,6 +162,12 @@ Ruta base de la API: `/api/v1/franchises`
 
 ### Ejemplos `curl` listos para probar
 
+> **💡 Nota para usuarios de Windows PowerShell 5.1**:
+> Los siguientes ejemplos están escritos para **`bash`** (**Git Bash**, **WSL**, Linux o macOS). En **Windows PowerShell 5.1**, `curl` es un alias de `Invoke-WebRequest` y el parser nativo recorta las comillas dobles internas dentro de `-d '{...}'`. Si usas PowerShell 5.1, ejecuta los comandos desde **Git Bash / WSL**, utiliza la interfaz interactiva **Swagger UI** en `http://localhost:8080/swagger-ui.html`, o bien invoca `curl.exe` pasando el JSON por `stdin` con `-d "@-"`:
+> ```powershell
+> '{"name": "McDonalds"}' | curl.exe -X POST http://localhost:8080/api/v1/franchises -H "Content-Type: application/json" -d "@-"
+> ```
+
 #### 1. Crear franquicia
 ```bash
 curl -X POST http://localhost:8080/api/v1/franchises \
